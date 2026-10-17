@@ -44,7 +44,7 @@ body.con-chat-abierto .barra-superior { display: none !important; }
   box-shadow: 0 2px 12px rgba(0,0,0,0.15); z-index: 200;
 }
 .item-menu {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px;
   background: none; border: none; cursor: pointer; color: #888; padding: 4px 12px;
   transition: all 0.2s;
 }
@@ -52,9 +52,20 @@ body.con-chat-abierto .barra-superior { display: none !important; }
 .item-menu svg { width: 22px; height: 22px; fill: currentColor; }
 .item-menu span { font-size: 11px; }
 
+/* CONTADOR DE MENSAJES SIN LEER */
+.contador-sin-leer {
+  display: none; position: absolute; top: -2px; right: -2px;
+  background: #ef4444; color: #fff;
+  font-size: 10px; font-weight: bold;
+  min-width: 18px; height: 18px;
+  border-radius: 50%;
+  align-items: center; justify-content: center;
+  line-height: 1;
+}
+
 /* LISTAS */
 .item-chat, .item-contacto {
-  padding: 14px; border-bottom: 1px solid #eee; cursor: pointer;
+  position: relative; padding: 14px; border-bottom: 1px solid #eee; cursor: pointer;
   transition: transform 0.1s, background 0.1s;
 }
 .item-chat:active, .item-contacto:active { transform: scale(0.97); background: #dbeafe; }
@@ -65,6 +76,13 @@ body.con-chat-abierto .barra-superior { display: none !important; }
 .seccion-agregar label { display: block; margin-bottom: 6px; font-size: 14px; }
 .fila-input { display: flex; gap: 8px; }
 .fila-input input { flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; }
+
+/* PUNTO AZUL DE MENSAJES SIN LEER EN LISTA */
+.punto-sin-leer {
+  position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+  width: 10px; height: 10px;
+  background: #2563eb; border-radius: 50%;
+}
 
 /* PANTALLA DE CHAT */
 .cabecera-chat {
@@ -85,6 +103,17 @@ body.con-chat-abierto .barra-superior { display: none !important; }
 .mensaje.otro { background: #fff; margin-right: auto; border-bottom-left-radius: 4px; }
 .mensaje img, .mensaje video { max-width: 100%; border-radius: 8px; margin-top: 4px; cursor: pointer; }
 .hora { font-size: 10px; color: #888; margin-top: 4px; text-align: right; }
+
+/* MARCADORES DE ESTADO */
+.estado-mensaje {
+  font-size: 10px;
+  color: #9ca3af;
+  margin-top: 2px;
+  text-align: right;
+}
+.estado-enviado::after { content: "✓ Enviado"; }
+.estado-entregado::after { content: "✓✓ Entregado"; color: #6b7280; }
+.estado-leido::after { content: "✓✓ Leído"; color: #3b82f6; font-weight: 500; }
 
 /* OPCIONES Y BARRA DE ENVÍO */
 .opciones-envio {
