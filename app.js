@@ -11,6 +11,7 @@ const listaChats = document.getElementById('listaChats');
 const listaLlamadas = document.getElementById('listaLlamadas');
 const sinChats = document.getElementById('sinChats');
 const sinLlamadas = document.getElementById('sinLlamadas');
+const contadorGlobalSinLeer = document.getElementById('contadorGlobalSinLeer');
 
 const pantallaPrincipal = document.getElementById('pantallaPrincipal');
 const pantallaChat = document.getElementById('pantallaChat');
@@ -52,6 +53,7 @@ let reconectarTiempo = null;
 let grabandoAudio = false;
 let grabadoraActiva = null;
 let flujoGrabacion = null;
+let mensajesSinLeer = {};
 
 // BASE DE DATOS LOCAL
 function iniciarDB() {
@@ -93,6 +95,7 @@ async function guardarChat(numero, mensaje) {
       chat.mensajes.push({ ...mensaje, fecha: Date.now() });
       chat.ultimoMensaje = mensaje.texto || '[Archivo]';
       chat.ultimaFecha = Date.now();
+      chat.leido = chat.leido || false;
       tx.objectStore('chats').put(chat, numero);
       tx.oncomplete = res;
     };
@@ -114,6 +117,23 @@ async function leerChats() {
   });
 }
 
+async function marcarComoLeido(numero) {
+  return new Promise(res => {
+    const tx = baseDatos.transaction('chats', 'readwrite');
+    const solicitud = tx.objectStore('chats').get(numero);
+    solicitud.onsuccess = () => {
+      const chat = solicitud.result;
+      if (chat) {
+        chat.leido = true;
+        tx.objectStore('chats').put(chat, numero);
+      }
+      tx.oncomplete = res;
+    };
+    delete mensajesSinLeer[numero];
+    actualizarContadorGlobal();
+  });
+}
+
 async function guardarLlamada(datos) {
   return new Promise(res => {
     const tx = baseDatos.transaction('llamadas', 'readwrite');
@@ -130,6 +150,13 @@ async function leerLlamadas() {
   });
 }
 
+// CONTADOR DE MENSAJES SIN LEER
+function actualizarContadorGlobal() {
+  const total = Object.values(mensajesSinLeer).reduce((a, b) => a + b, 0);
+  contadorGlobalSinLeer.style.display = total > 0 ? 'flex' : 'none';
+  contadorGlobalSinLeer.textContent = total > 99 ? '99+' : total;
+}
+
 // INICIO
 async function iniciar() {
   await iniciarDB();
@@ -141,6 +168,13 @@ async function iniciar() {
   }
 
   contactos = await leerChats();
+  Object.keys(contactos).forEach(numero => {
+    if (!contactos[numero].leido) {
+      mensajesSinLeer[numero] = 1;
+    }
+  });
+  actualizarContadorGlobal();
+  
   renderizarListaChats();
   renderizarListaContactos();
   renderizarListaLlamadas();
@@ -202,6 +236,7 @@ itemsMenu.forEach(item => {
     const nombre = item.dataset.pestana;
     itemsMenu.forEach(i => i.classList.toggle('activa', i === item));
     vistas.forEach(v => v.classList.toggle('activa', v.id === `vista-${nombre}`));
+    menuOpciones.classList.remove('mostrar');
   });
 });
 
@@ -251,11 +286,13 @@ function renderizarListaChats() {
   Object.entries(contactos)
     .sort((a, b) => (b[1].ultimaFecha || 0) - (a[1].ultimaFecha || 0))
     .forEach(([numero, datos]) => {
+      const sinLeer = mensajesSinLeer[numero] && chatActivo !== numero;
       const div = document.createElement('div');
       div.className = 'item-chat';
       div.innerHTML = `
         <div class="nombre-contacto">${numero}</div>
         <div class="info-mensaje">${datos.ultimoMensaje || 'Sin mensajes'}</div>
+        ${sinLeer ? '<div class="punto-sin-leer"></div>' : ''}
       `;
       div.addEventListener('click', () => abrirChat(numero));
       listaChats.appendChild(div);
@@ -283,6 +320,7 @@ function abrirChat(numero) {
   chatActivo = numero;
   nombreChat.textContent = numero;
   cajaMensajes.innerHTML = '';
+  marcarComoLeido(numero);
 
   if (peer && peer.open && !conexiones[numero]) {
     const conn = peer.connect(numero);
@@ -297,6 +335,7 @@ function abrirChat(numero) {
   pantallaPrincipal.classList.remove('activa');
   pantallaChat.classList.add('activa');
   document.body.classList.add('con-chat-abierto');
+  menuOpciones.classList.remove('mostrar');
 }
 
 btnVolver.addEventListener('click', () => {
@@ -305,6 +344,7 @@ btnVolver.addEventListener('click', () => {
   document.body.classList.remove('con-chat-abierto');
   chatActivo = null;
   renderizarListaChats();
+  menuOpciones.classList.remove('mostrar');
 });
 
 btnOpciones.addEventListener('click', () => {
@@ -341,7 +381,7 @@ async function enviarMensaje() {
 
   const mensaje = {
     tipo: 'texto', de: miId, para: chatActivo, texto: texto,
-    propio: true, fecha: Date.now()
+    propio: true, fecha: Date.now(), estado: 'enviado'
   };
 
   if (conexiones[chatActivo]?.open) conexiones[chatActivo].send(mensaje);
@@ -358,7 +398,7 @@ inputImagen.addEventListener('change', async e => {
   const archivo = e.target.files[0];
   if (!archivo || !chatActivo) return;
   const datos = await leerArchivoComoBase64(archivo);
-  const mensaje = { tipo: 'imagen', de: miId, para: chatActivo, datos, propio: true, fecha: Date.now() };
+  const mensaje = { tipo: 'imagen', de: miId, para: chatActivo, datos, propio: true, fecha: Date.now(), estado: 'enviado' };
   if (conexiones[chatActivo]?.open) conexiones[chatActivo].send(mensaje);
   await guardarChat(chatActivo, mensaje);
   contactos[chatActivo].mensajes.push(mensaje);
@@ -370,7 +410,7 @@ inputVideo.addEventListener('change', async e => {
   const archivo = e.target.files[0];
   if (!archivo || !chatActivo) return;
   const datos = await leerArchivoComoBase64(archivo);
-  const mensaje = { tipo: 'video', de: miId, para: chatActivo, datos, propio: true, fecha: Date.now() };
+  const mensaje = { tipo: 'video', de: miId, para: chatActivo, datos, propio: true, fecha: Date.now(), estado: 'enviado' };
   if (conexiones[chatActivo]?.open) conexiones[chatActivo].send(mensaje);
   await guardarChat(chatActivo, mensaje);
   contactos[chatActivo].mensajes.push(mensaje);
@@ -393,7 +433,7 @@ async function grabarYEnviarAudio() {
       const base64 = await leerArchivoComoBase64(datosAudio);
       const mensaje = {
         tipo: 'audio', de: miId, para: chatActivo,
-        datos: base64, propio: true, fecha: Date.now()
+        datos: base64, propio: true, fecha: Date.now(), estado: 'enviado'
       };
       
       if (conexiones[chatActivo]?.open) conexiones[chatActivo].send(mensaje);
@@ -451,15 +491,29 @@ function leerArchivoComoBase64(archivo) {
 function renderizarMensaje(m) {
   const div = document.createElement('div');
   div.className = `mensaje ${m.propio ? 'propio' : 'otro'}`;
+  const hora = new Date(m.fecha).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const estadoClase = m.propio ? `estado-${m.estado || 'enviado'}` : '';
   
   if (m.tipo === 'texto') {
-    div.innerHTML = `<p>${m.texto}</p><p class="hora">${new Date(m.fecha).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>`;
+    div.innerHTML = `
+      <p>${m.texto}</p>
+      <p class="hora">${hora}${m.propio ? `<span class="estado-mensaje ${estadoClase}"></span>` : ''}</p>
+    `;
   } else if (m.tipo === 'imagen') {
-    div.innerHTML = `<img src="${m.datos}" alt="Imagen"><p class="hora">${new Date(m.fecha).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>`;
+    div.innerHTML = `
+      <img src="${m.datos}" alt="Imagen">
+      <p class="hora">${hora}${m.propio ? `<span class="estado-mensaje ${estadoClase}"></span>` : ''}</p>
+    `;
   } else if (m.tipo === 'video') {
-    div.innerHTML = `<video controls src="${m.datos}"></video><p class="hora">${new Date(m.fecha).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>`;
+    div.innerHTML = `
+      <video controls src="${m.datos}"></video>
+      <p class="hora">${hora}${m.propio ? `<span class="estado-mensaje ${estadoClase}"></span>` : ''}</p>
+    `;
   } else if (m.tipo === 'audio') {
-    div.innerHTML = `<audio controls src="${m.datos}"><p class="hora">${new Date(m.fecha).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>`;
+    div.innerHTML = `
+      <audio controls src="${m.datos}">
+      <p class="hora">${hora}${m.propio ? `<span class="estado-mensaje ${estadoClase}"></span>` : ''}</p>
+    `;
   }
 
   cajaMensajes.appendChild(div);
@@ -495,7 +549,14 @@ async function procesarMensajeRecibido(datos, deNumero) {
   if (!contactos[deNumero]) contactos[deNumero] = { mensajes: [] };
   contactos[deNumero].mensajes.push(datos);
   
-  if (chatActivo === deNumero) renderizarMensaje(datos);
+  if (chatActivo === deNumero) {
+    renderizarMensaje(datos);
+  } else {
+    contactos[deNumero].leido = false;
+    mensajesSinLeer[deNumero] = (mensajesSinLeer[deNumero] || 0) + 1;
+    actualizarContadorGlobal();
+  }
+  
   renderizarListaChats();
 }
 
@@ -541,7 +602,7 @@ function manejarLlamadaEntrante(llamada) {
     manejarLlamadaComun(llamada, llamada.peer, 'entrante');
   };
 
-    btnRechazar.onclick = () => {
+  btnRechazar.onclick = () => {
     llamada.close();
     pantallaLlamadaEntrante.classList.remove('activa');
     pantallaPrincipal.classList.add('activa');
@@ -578,4 +639,3 @@ btnColgar.addEventListener('click', () => {
 
 // INICIAR TODO
 iniciar();
-
