@@ -637,5 +637,39 @@ btnColgar.addEventListener('click', () => {
   if (llamadaActiva) llamadaActiva.close();
 });
 
+// 🔄 RECONEXIÓN AUTOMÁTICA
+async function reconectarSiEsNecesario() {
+  if (!miId) return;
+  
+  if (!peer || !peer.open) {
+    console.log('🔄 Reconectando automáticamente...');
+    estadoConexion.textContent = 'Reconectando...';
+    estadoConexion.className = 'estado-texto estado-reintentando';
+    
+    peer = new Peer(miId);
+    
+    peer.on('open', () => {
+      estadoConexion.textContent = '● En línea';
+      estadoConexion.className = 'estado-texto estado-conectado';
+      btnConectar.textContent = 'Conectado';
+      btnConectar.disabled = true;
+      miNumeroInput.readOnly = true;
+    });
+    
+    peer.on('connection', manejarConexionEntrante);
+    peer.on('call', manejarLlamadaEntrante);
+    
+    peer.on('error', () => {
+      estadoConexion.textContent = 'Desconectado — toca reconectar';
+      estadoConexion.className = 'estado-texto estado-desconectado';
+      btnConectar.disabled = false;
+      btnConectar.textContent = 'Conectar';
+    });
+  }
+}
+
+// Revisamos cada 5 segundos si seguimos conectados
+setInterval(reconectarSiEsNecesario, 5000);
+
 // INICIAR TODO
 iniciar();
