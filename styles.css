@@ -306,3 +306,6 @@ button, .item-chat, .item-contacto {
   transition: transform 0.1s, background 0.1s;
 }
 button:active { transform: scale(0.97); }
+/* ========== QUITAR RESALTADO AL MANTENER PRESIONADO ========== */
+* {
+  -webkit-tap-highlight-color: transparent !
