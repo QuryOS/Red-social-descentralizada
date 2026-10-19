@@ -72,11 +72,14 @@ function actualizarEstadoAmigo(numeroAmigo) {
   return 'desconectado';
 }
 
-// 📂 INDEXEDDB — ÚNICO GUARDADO
+// 📂 INDEXEDDB
 function iniciarDB() {
   return new Promise((res, rej) => {
-    const solicitud = indexedDB.open('CodexDB_Final', 1);
+    console.log('🔌 Abriendo base de datos...');
+    const solicitud = indexedDB.open('CodexDB_Final_v2', 1);
+    
     solicitud.onupgradeneeded = e => {
+      console.log('🆕 Creando estructura de base de datos...');
       baseDatos = e.target.result;
       if (!baseDatos.objectStoreNames.contains('perfil')) {
         baseDatos.createObjectStore('perfil');
@@ -84,15 +87,16 @@ function iniciarDB() {
       if (!baseDatos.objectStoreNames.contains('mensajes')) {
         const store = baseDatos.createObjectStore('mensajes', { keyPath: 'id' });
         store.createIndex('conQuien', 'conQuien', { unique: false });
-        store.createIndex('fecha', 'fecha', { unique: false });
         console.log('✅ Almacén de mensajes creado');
       }
     };
+    
     solicitud.onsuccess = e => {
       baseDatos = e.target.result;
-      console.log('✅ IndexedDB conectada');
+      console.log('✅ Base de datos conectada. Stores disponibles:', baseDatos.objectStoreNames);
       res();
     };
+    
     solicitud.onerror = e => {
       console.error('❌ Error abriendo DB:', e.target.error);
       rej(e.target.error);
@@ -118,10 +122,12 @@ async function leerValor(clave) {
   });
 }
 
-// ✅ GUARDAR MENSAJE — CORREGIDO, sin fallos
+// ✅ GUARDAR MENSAJE — con confirmación clara
 async function guardarMensaje(conQuien, mensaje) {
+  console.log('👉 FUNCIÓN guardarMensaje llamada. conQuien =', conQuien);
+  
   if (!conQuien) {
-    console.error('❌ No se puede guardar: falta conQuien');
+    console.error('❌ ERROR: conQuien está vacío. No se puede guardar.');
     return;
   }
 
@@ -137,13 +143,19 @@ async function guardarMensaje(conQuien, mensaje) {
     fecha: mensaje.fecha || Date.now()
   };
 
-  console.log('💾 Guardando →', registro.conQuien, registro.tipo, registro.texto || '[sin texto]');
+  console.log('💾 Intentando guardar:', registro);
 
   return new Promise((res, rej) => {
+    if (!baseDatos) {
+      console.error('❌ baseDatos es null');
+      return rej('DB no inicializada');
+    }
+    
     const tx = baseDatos.transaction('mensajes', 'readwrite');
-    tx.objectStore('mensajes').put(registro);
+    
     tx.oncomplete = () => {
-      console.log('✅ Guardado correctamente');
+      console.log('✅ MENSAJE GUARDADO EN BASE DE DATOS');
+      
       // Actualizar en memoria
       if (!contactos[conQuien]) {
         contactos[conQuien] = { mensajes: [], ultimoMensaje: '', ultimoTiempo: 0, leido: true };
@@ -155,30 +167,47 @@ async function guardarMensaje(conQuien, mensaje) {
                       registro.texto || '';
       contactos[conQuien].ultimoMensaje = preview;
       contactos[conQuien].ultimoTiempo = registro.fecha;
+      
       res();
     };
+    
     tx.onerror = e => {
-      console.error('❌ Error guardando:', e.target.error);
+      console.error('❌ Error en transacción:', e.target.error);
       rej(e.target.error);
     };
+    
+    tx.objectStore('mensajes').put(registro);
   });
 }
 
-// ✅ CARGAR TODOS LOS MENSAJES AL INICIO
+// ✅ CARGAR MENSAJES — paso a paso visible
 async function cargarTodosLosMensajes() {
+  console.log('📂 INICIANDO CARGA DE MENSAJES...');
+  
+  if (!baseDatos) {
+    console.error('❌ baseDatos no disponible al cargar');
+    return {};
+  }
+
   return new Promise((res, rej) => {
-    const tx = baseDatos.transaction('mensajes');
-    const todos = tx.objectStore('mensajes').getAll();
+    const tx = baseDatos.transaction('mensajes', 'readonly');
+    const store = tx.objectStore('mensajes');
+    const todos = store.getAll();
     
     todos.onsuccess = () => {
       const todosMensajes = todos.result;
-      console.log(`📂 Leídos ${todosMensajes.length} mensajes de la base de datos`);
+      console.log(`📋 Total de mensajes leídos de la DB: ${todosMensajes.length}`);
+      
+      if (todosMensajes.length === 0) {
+        console.log('⚠️ No hay ningún mensaje guardado todavía');
+        return res({});
+      }
       
       const mapa = {};
       
-      todosMensajes.forEach(msg => {
+      todosMensajes.forEach((msg, indice) => {
         if (!msg.conQuien) {
-          console.warn('⚠️ Mensaje sin conQuien ignorado:', msg);
+          console.warn(`⚠️ Mensaje ${indice} sin conQuien:`, msg);
           return;
         }
         if (!mapa[msg.conQuien]) {
@@ -198,7 +227,8 @@ async function cargarTodosLosMensajes() {
         mapa[msg.conQuien].ultimoTiempo = msg.fecha;
       });
       
-      console.log(`✅ Cargados ${Object.keys(mapa).length} conversaciones`);
+      console.log(`✅ Mensajes organizados en ${Object.keys(mapa).length} conversaciones`);
+      console.log('📊 Resumen:', mapa);
       res(mapa);
     };
     
@@ -253,7 +283,7 @@ async function reconectar() {
   });
 
   peer.on('error', err => {
-    console.error('❌ Error:', err.type);
+    console.error('❌ Error Peer:', err.type);
     reconectandoActivo = false;
     
     if (err.type === 'unavailable-id') {
@@ -271,7 +301,9 @@ async function reconectar() {
 
 // 🚀 INICIO
 async function iniciar() {
-  console.log('🚀 Iniciando Codex...');
+  console.log('=====================================');
+  console.log('🚀 INICIANDO CODEX — VERSIÓN DE PRUEBA');
+  console.log('=====================================');
   
   await iniciarDB();
   
@@ -282,9 +314,10 @@ async function iniciar() {
     setTimeout(reconectar, 500);
   }
 
-  // Cargar historial de TODAS las conversaciones
+  // Cargar historial
+  console.log('🔄 Cargando conversaciones guardadas...');
   contactos = await cargarTodosLosMensajes();
-  console.log('📋 Conversaciones cargadas:', Object.keys(contactos));
+  console.log('📋 contactos final:', contactos);
   
   // Contar sin leer
   Object.keys(contactos).forEach(numero => {
@@ -300,6 +333,9 @@ async function iniciar() {
       Object.keys(conexiones).forEach(amigo => enviarLatido(amigo));
     }
   }, LATIDO_INTERVALO);
+  
+  console.log('✅ INICIO COMPLETO');
+  console.log('=====================================');
 }
 
 async function conectar(numero) {
@@ -375,6 +411,8 @@ function renderizarListaContactos() {
 
 function renderizarListaChats() {
   listaChats.innerHTML = '';
+  console.log('📱 Renderizando lista de chats. Contactos:', Object.keys(contactos));
+  
   const hayChats = Object.keys(contactos).length > 0;
   sinChats.classList.toggle('oculto', hayChats);
   
@@ -417,10 +455,13 @@ function abrirChat(numero) {
   if (contactos[numero]) contactos[numero].leido = true;
   actualizarContadorGlobal();
 
-  console.log(`💬 Abriendo chat con ${numero} — ${contactos[numero]?.mensajes?.length || 0} mensajes guardados`);
+  console.log(`💬 Abriendo chat con ${numero}`);
+  console.log(`📋 Mensajes guardados para este chat:`, contactos[numero]?.mensajes?.length || 0);
 
-  if (contactos[numero]?.mensajes) {
+  if (contactos[numero]?.mensajes && contactos[numero].mensajes.length > 0) {
     contactos[numero].mensajes.forEach(m => renderizarMensaje(m));
+  } else {
+    console.log('⚠️ No hay mensajes para mostrar en este chat');
   }
 
   if (peer && peer.open && !conexiones[numero]) {
@@ -483,6 +524,7 @@ async function enviarMensaje() {
     conexiones[chatActivo].send(JSON.stringify(mensaje));
   }
 
+  console.log('📤 Enviando mensaje...');
   await guardarMensaje(chatActivo, mensaje);
   renderizarMensaje(mensaje);
   inputMensaje.value = '';
@@ -595,9 +637,10 @@ async function procesarMensajeRecibido(datosCrudos, deNumero) {
     datos.propio = false;
     datos.fecha = datos.fecha || Date.now();
     
-    console.log(`📩 Mensaje recibido de ${deNumero}:`, datos.tipo);
+    console.log(`📩 Mensaje recibido de ${deNumero}:`, datos.tipo, datos.texto || '');
     
-    // ✅ GUARDAR con conQuien = deNumero
+    // ✅ GUARDAR
+    console.log('💾 Guardando mensaje recibido...');
     await guardarMensaje(deNumero, datos);
     
     if (chatActivo === deNumero) {
