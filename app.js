@@ -39,6 +39,20 @@ const visorCompleto = document.getElementById('visorCompleto');
 const contenidoVisor = document.getElementById('contenidoVisor');
 const btnCerrarVisor = document.getElementById('btnCerrarVisor');
 
+// ⭐ AVISOS EN PANTALLA
+function mostrarAviso(texto, tipo='info') {
+  const aviso = document.createElement('div');
+  aviso.style.cssText = `
+    position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+    padding: 10px 20px; border-radius: 20px; background: ${
+      tipo==='exito'?'#25c557':tipo==='error'?'#ff4444':'#333'
+    }; color: white; z-index: 9999; font-size: 14px;
+  `;
+  aviso.textContent = texto;
+  document.body.appendChild(aviso);
+  setTimeout(()=>aviso.remove(), 3000);
+}
+
 // ESTADO GLOBAL
 let peer = null;
 let miId = '';
@@ -75,11 +89,9 @@ function actualizarEstadoAmigo(numeroAmigo) {
 // 📂 INDEXEDDB
 function iniciarDB() {
   return new Promise((res, rej) => {
-    console.log('🔌 Abriendo base de datos...');
-    const solicitud = indexedDB.open('CodexDB_Final_v2', 1);
+    const solicitud = indexedDB.open('CodexDB_v3', 1);
     
     solicitud.onupgradeneeded = e => {
-      console.log('🆕 Creando estructura de base de datos...');
       baseDatos = e.target.result;
       if (!baseDatos.objectStoreNames.contains('perfil')) {
         baseDatos.createObjectStore('perfil');
@@ -87,18 +99,16 @@ function iniciarDB() {
       if (!baseDatos.objectStoreNames.contains('mensajes')) {
         const store = baseDatos.createObjectStore('mensajes', { keyPath: 'id' });
         store.createIndex('conQuien', 'conQuien', { unique: false });
-        console.log('✅ Almacén de mensajes creado');
       }
     };
     
     solicitud.onsuccess = e => {
       baseDatos = e.target.result;
-      console.log('✅ Base de datos conectada. Stores disponibles:', baseDatos.objectStoreNames);
       res();
     };
     
     solicitud.onerror = e => {
-      console.error('❌ Error abriendo DB:', e.target.error);
+      mostrarAviso('❌ No se pudo abrir la base de datos', 'error');
       rej(e.target.error);
     };
   });
@@ -122,17 +132,15 @@ async function leerValor(clave) {
   });
 }
 
-// ✅ GUARDAR MENSAJE — con confirmación clara
+// ✅ GUARDAR MENSAJE — con aviso
 async function guardarMensaje(conQuien, mensaje) {
-  console.log('👉 FUNCIÓN guardarMensaje llamada. conQuien =', conQuien);
-  
   if (!conQuien) {
-    console.error('❌ ERROR: conQuien está vacío. No se puede guardar.');
+    mostrarAviso('❌ Error: sin destinatario', 'error');
     return;
   }
 
   const registro = {
-    id: `${conQuien}-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    id: `${conQuien}-${Date.now()}`,
     conQuien: conQuien,
     de: mensaje.de,
     para: mensaje.para,
@@ -143,97 +151,63 @@ async function guardarMensaje(conQuien, mensaje) {
     fecha: mensaje.fecha || Date.now()
   };
 
-  console.log('💾 Intentando guardar:', registro);
-
   return new Promise((res, rej) => {
-    if (!baseDatos) {
-      console.error('❌ baseDatos es null');
-      return rej('DB no inicializada');
-    }
-    
     const tx = baseDatos.transaction('mensajes', 'readwrite');
-    
+    tx.objectStore('mensajes').put(registro);
     tx.oncomplete = () => {
-      console.log('✅ MENSAJE GUARDADO EN BASE DE DATOS');
-      
-      // Actualizar en memoria
+      mostrarAviso('✅ Mensaje guardado', 'exito');
       if (!contactos[conQuien]) {
         contactos[conQuien] = { mensajes: [], ultimoMensaje: '', ultimoTiempo: 0, leido: true };
       }
       contactos[conQuien].mensajes.push(registro);
       const preview = registro.tipo === 'imagen' ? '[Imagen]' :
-                      registro.tipo === 'video' ? '[Video]' :
-                      registro.tipo === 'audio' ? '[Nota de voz]' :
-                      registro.texto || '';
+                      registro.tipo === 'video' ? '[Video]' : registro.texto;
       contactos[conQuien].ultimoMensaje = preview;
       contactos[conQuien].ultimoTiempo = registro.fecha;
-      
       res();
     };
-    
     tx.onerror = e => {
-      console.error('❌ Error en transacción:', e.target.error);
+      mostrarAviso('❌ No se pudo guardar', 'error');
       rej(e.target.error);
     };
-    
-    tx.objectStore('mensajes').put(registro);
   });
 }
 
-// ✅ CARGAR MENSAJES — paso a paso visible
+// ✅ CARGAR MENSAJES — con aviso
 async function cargarTodosLosMensajes() {
-  console.log('📂 INICIANDO CARGA DE MENSAJES...');
-  
-  if (!baseDatos) {
-    console.error('❌ baseDatos no disponible al cargar');
-    return {};
-  }
-
   return new Promise((res, rej) => {
+    if (!baseDatos) { mostrarAviso('❌ Base de datos no lista', 'error'); return res({}); }
+    
     const tx = baseDatos.transaction('mensajes', 'readonly');
-    const store = tx.objectStore('mensajes');
-    const todos = store.getAll();
+    const todos = tx.objectStore('mensajes').getAll();
     
     todos.onsuccess = () => {
       const todosMensajes = todos.result;
-      console.log(`📋 Total de mensajes leídos de la DB: ${todosMensajes.length}`);
       
       if (todosMensajes.length === 0) {
-        console.log('⚠️ No hay ningún mensaje guardado todavía');
+        mostrarAviso('📂 No hay mensajes guardados aún');
         return res({});
       }
       
       const mapa = {};
-      
-      todosMensajes.forEach((msg, indice) => {
-        if (!msg.conQuien) {
-          console.warn(`⚠️ Mensaje ${indice} sin conQuien:`, msg);
-          return;
-        }
+      todosMensajes.forEach(msg => {
+        if (!msg.conQuien) return;
         if (!mapa[msg.conQuien]) {
-          mapa[msg.conQuien] = {
-            mensajes: [],
-            ultimoMensaje: '',
-            ultimoTiempo: 0,
-            leido: true
-          };
+          mapa[msg.conQuien] = { mensajes: [], ultimoMensaje: '', ultimoTiempo: 0, leido: true };
         }
         mapa[msg.conQuien].mensajes.push(msg);
         const preview = msg.tipo === 'imagen' ? '[Imagen]' :
-                        msg.tipo === 'video' ? '[Video]' :
-                        msg.tipo === 'audio' ? '[Nota de voz]' :
-                        msg.texto || '';
+                        msg.tipo === 'video' ? '[Video]' : msg.texto;
         mapa[msg.conQuien].ultimoMensaje = preview;
         mapa[msg.conQuien].ultimoTiempo = msg.fecha;
       });
       
-      console.log(`✅ Mensajes organizados en ${Object.keys(mapa).length} conversaciones`);
-      console.log('📊 Resumen:', mapa);
+      mostrarAviso(`📂 Cargados ${todosMensajes.length} mensajes`, 'exito');
       res(mapa);
     };
     
     todos.onerror = e => {
-      console.error('❌ Error leyendo mensajes:', e.target.error);
+      mostrarAviso('❌ No se pudieron cargar los mensajes', 'error');
       rej(e.target.error);
     };
   });
@@ -249,13 +223,8 @@ function actualizarContadorGlobal() {
 async function reconectar() {
   if (!miId || reconectandoActivo) return;
   
-  console.log('🔄 Reconectando como:', miId);
   reconectandoActivo = true;
-  
-  if (peer) {
-    peer.destroy();
-    peer = null;
-  }
+  if (peer) peer.destroy();
 
   estadoConexion.textContent = 'Reconectando...';
   estadoConexion.className = 'estado-texto estado-reintentando';
@@ -265,7 +234,6 @@ async function reconectar() {
   peer = new Peer(miId, { debug: 1 });
 
   peer.on('open', () => {
-    console.log('✅ Conectado como:', miId);
     estadoConexion.textContent = '● En línea';
     estadoConexion.className = 'estado-texto estado-conectado';
     btnConectar.textContent = 'Conectado';
@@ -278,14 +246,11 @@ async function reconectar() {
   peer.on('call', manejarLlamadaEntrante);
 
   peer.on('close', () => {
-    console.log('⚠️ Desconectado');
     if (!reconectandoActivo) setTimeout(reconectar, 3000);
   });
 
   peer.on('error', err => {
-    console.error('❌ Error Peer:', err.type);
     reconectandoActivo = false;
-    
     if (err.type === 'unavailable-id') {
       estadoConexion.textContent = 'Número en uso';
       estadoConexion.className = 'estado-texto estado-desconectado';
@@ -301,10 +266,6 @@ async function reconectar() {
 
 // 🚀 INICIO
 async function iniciar() {
-  console.log('=====================================');
-  console.log('🚀 INICIANDO CODEX — VERSIÓN DE PRUEBA');
-  console.log('=====================================');
-  
   await iniciarDB();
   
   const numeroGuardado = await leerValor('miNumero');
@@ -314,12 +275,8 @@ async function iniciar() {
     setTimeout(reconectar, 500);
   }
 
-  // Cargar historial
-  console.log('🔄 Cargando conversaciones guardadas...');
   contactos = await cargarTodosLosMensajes();
-  console.log('📋 contactos final:', contactos);
   
-  // Contar sin leer
   Object.keys(contactos).forEach(numero => {
     if (!contactos[numero].leido) mensajesSinLeer[numero] = 1;
   });
@@ -333,9 +290,6 @@ async function iniciar() {
       Object.keys(conexiones).forEach(amigo => enviarLatido(amigo));
     }
   }, LATIDO_INTERVALO);
-  
-  console.log('✅ INICIO COMPLETO');
-  console.log('=====================================');
 }
 
 async function conectar(numero) {
@@ -370,7 +324,6 @@ btnAgregarUsuario.addEventListener('click', () => {
   if (peer && peer.open) {
     const conn = peer.connect(numero);
     conn.on('open', () => {
-      console.log('🔗 Conectado con', numero);
       conexiones[numero] = conn;
       renderizarListaChats();
       renderizarListaContactos();
@@ -411,8 +364,6 @@ function renderizarListaContactos() {
 
 function renderizarListaChats() {
   listaChats.innerHTML = '';
-  console.log('📱 Renderizando lista de chats. Contactos:', Object.keys(contactos));
-  
   const hayChats = Object.keys(contactos).length > 0;
   sinChats.classList.toggle('oculto', hayChats);
   
@@ -455,13 +406,8 @@ function abrirChat(numero) {
   if (contactos[numero]) contactos[numero].leido = true;
   actualizarContadorGlobal();
 
-  console.log(`💬 Abriendo chat con ${numero}`);
-  console.log(`📋 Mensajes guardados para este chat:`, contactos[numero]?.mensajes?.length || 0);
-
-  if (contactos[numero]?.mensajes && contactos[numero].mensajes.length > 0) {
+  if (contactos[numero]?.mensajes) {
     contactos[numero].mensajes.forEach(m => renderizarMensaje(m));
-  } else {
-    console.log('⚠️ No hay mensajes para mostrar en este chat');
   }
 
   if (peer && peer.open && !conexiones[numero]) {
@@ -524,7 +470,6 @@ async function enviarMensaje() {
     conexiones[chatActivo].send(JSON.stringify(mensaje));
   }
 
-  console.log('📤 Enviando mensaje...');
   await guardarMensaje(chatActivo, mensaje);
   renderizarMensaje(mensaje);
   inputMensaje.value = '';
@@ -604,14 +549,12 @@ function renderizarMensaje(m) {
 
 function manejarConexionEntrante(conn) {
   const numero = conn.peer;
-  console.log('📥 Conexión entrante de:', numero);
   conexiones[numero] = conn;
   estadoAmigos[numero] = { visto: Date.now(), ok: true };
 
   conn.on('data', datos => procesarMensajeRecibido(datos, numero));
   
   conn.on('close', () => {
-    console.log('🔌 Conexión cerrada con', numero);
     estadoAmigos[numero] = { visto: Date.now(), ok: false };
   });
   
@@ -624,7 +567,6 @@ async function procesarMensajeRecibido(datosCrudos, deNumero) {
   try {
     datos = typeof datosCrudos === 'string' ? JSON.parse(datosCrudos) : datosCrudos;
   } catch {
-    console.log('⚠️ Mensaje no reconocido');
     return;
   }
 
@@ -637,10 +579,6 @@ async function procesarMensajeRecibido(datosCrudos, deNumero) {
     datos.propio = false;
     datos.fecha = datos.fecha || Date.now();
     
-    console.log(`📩 Mensaje recibido de ${deNumero}:`, datos.tipo, datos.texto || '');
-    
-    // ✅ GUARDAR
-    console.log('💾 Guardando mensaje recibido...');
     await guardarMensaje(deNumero, datos);
     
     if (chatActivo === deNumero) {
@@ -654,17 +592,14 @@ async function procesarMensajeRecibido(datosCrudos, deNumero) {
   }
 }
 
-// Llamadas simplificadas
 btnLlamar.addEventListener('click', () => alert('Llamadas en construcción'));
 btnColgar?.addEventListener('click', () => {});
 btnResponder?.addEventListener('click', () => {});
 btnRechazar?.addEventListener('click', () => {});
 
-// Cerrar visor
 btnCerrarVisor.addEventListener('click', () => {
   visorCompleto.classList.add('oculto');
   contenidoVisor.innerHTML = '';
 });
 
-// INICIAR
 iniciar();
