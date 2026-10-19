@@ -1,6 +1,145 @@
 // ==========================================
-// CODEx - JavaScript CORREGIDO
+// CODEx - JavaScript con IndexedDB
 // ==========================================
+
+// ---------- BASE DE DATOS INDEXEDDB ----------
+const DB_NOMBRE = 'CodexDB';
+const DB_VERSION = 1;
+let db = null;
+
+function abrirBaseDatos() {
+  return new Promise((resolver, rechazar) => {
+    const solicitud = indexedDB.open(DB_NOMBRE, DB_VERSION);
+    
+    solicitud.onupgradeneeded = (e) => {
+      db = e.target.result;
+      
+      // Almacén de conversaciones
+      if (!db.objectStoreNames.contains('conversaciones')) {
+        const store = db.createObjectStore('conversaciones', { keyPath: 'numero' });
+      }
+      
+      // Almacén de contactos
+      if (!db.objectStoreNames.contains('contactos')) {
+        const store = db.createObjectStore('contactos', { keyPath: 'numero' });
+      }
+      
+      // Almacén de historial de llamadas
+      if (!db.objectStoreNames.contains('llamadas')) {
+        const store = db.createObjectStore('llamadas', { autoIncrement: true });
+      }
+      
+      // Configuración
+      if (!db.objectStoreNames.contains('config')) {
+        const store = db.createObjectStore('config', { keyPath: 'clave' });
+      }
+    };
+    
+    solicitud.onsuccess = (e) => {
+      db = e.target.result;
+      resolver(db);
+    };
+    
+    solicitud.onerror = (e) => {
+      console.error('❌ Error abriendo DB:', e);
+      rechazar(e);
+    };
+  });
+}
+
+// Funciones de guardado y lectura
+async function guardarConversacionDB(numero, mensajes, ultimaLeida = null) {
+  return new Promise((resolver) => {
+    const tx = db.transaction('conversaciones', 'readwrite');
+    tx.objectStore('conversaciones').put({ numero, mensajes, ultimaLeida });
+    tx.oncomplete = resolver;
+  });
+}
+
+async function obtenerConversacionesDB() {
+  return new Promise((resolver) => {
+    const tx = db.transaction('conversaciones', 'readonly');
+    const solicitud = tx.objectStore('conversaciones').getAll();
+    solicitud.onsuccess = () => {
+      const resultado = {};
+      solicitud.resultado.forEach(r => {
+        resultado[r.numero] = r.mensajes;
+        if (r.ultimaLeida) resultado[r.numero].ultimaLeida = r.ultimaLeida;
+      });
+      resolver(resultado);
+    };
+  });
+}
+
+async function guardarContactoDB(numero, datos) {
+  return new Promise((resolver) => {
+    const tx = db.transaction('contactos', 'readwrite');
+    tx.objectStore('contactos').put({ numero, ...datos });
+    tx.oncomplete = resolver;
+  });
+}
+
+async function obtenerContactosDB() {
+  return new Promise((resolver) => {
+    const tx = db.transaction('contactos', 'readonly');
+    const solicitud = tx.objectStore('contactos').getAll();
+    solicitud.onsuccess = () => {
+      const resultado = {};
+      solicitud.resultado.forEach(r => {
+        resultado[r.numero] = r;
+      });
+      resolver(resultado);
+    };
+  });
+}
+
+async function eliminarContactoDB(numero) {
+  return new Promise((resolver) => {
+    const tx = db.transaction('contactos', 'readwrite');
+    tx.objectStore('contactos').delete(numero);
+    tx.oncomplete = resolver;
+  });
+}
+
+async function eliminarConversacionDB(numero) {
+  return new Promise((resolver) => {
+    const tx = db.transaction('conversaciones', 'readwrite');
+    tx.objectStore('conversaciones').delete(numero);
+    tx.oncomplete = resolver;
+  });
+}
+
+async function guardarLlamadaDB(datos) {
+  return new Promise((resolver) => {
+    const tx = db.transaction('llamadas', 'readwrite');
+    tx.objectStore('llamadas').add(datos);
+    tx.oncomplete = resolver;
+  });
+}
+
+async function obtenerLlamadasDB() {
+  return new Promise((resolver) => {
+    const tx = db.transaction('llamadas', 'readonly');
+    const solicitud = tx.objectStore('llamadas').getAll();
+    solicitud.onsuccess = () => resolver(solicitud.resultado.reverse());
+  });
+}
+
+async function guardarConfigDB(clave, valor) {
+  return new Promise((resolver) => {
+    const tx = db.transaction('config', 'readwrite');
+    tx.objectStore('config').put({ clave, valor });
+    tx.oncomplete = resolver;
+  });
+}
+
+async function obtenerConfigDB(clave, porDefecto = '') {
+  return new Promise((resolver) => {
+    const tx = db.transaction('config', 'readonly');
+    const solicitud = tx.objectStore('config').get(clave);
+    solicitud.onsuccess = () => resolver(solicitud.resultado ? solicitud.resultado.valor : porDefecto);
+  });
+}
 
 // ---------- ELEMENTOS DEL DOM ----------
 const miNumeroInput = document.getElementById('miNumero');
@@ -40,13 +179,26 @@ const puntoEstado = document.querySelector('.punto-estado');
 const textoEstado = document.getElementById('textoEstado');
 const nombrePerfil = document.getElementById('nombrePerfil');
 const numeroPerfil = document.getElementById('numeroPerfil');
-const btnEditarNombre = document.getElementById('btnEditarNombre');
 const btnGuardarPerfil = document.getElementById('btnGuardarPerfil');
 
-// Eliminar Chat
+// Menús de eliminar
 const menuEliminarChat = document.getElementById('menuEliminarChat');
 const opcionEliminarChat = document.getElementById('opcionEliminarChat');
+const menuEliminarMensaje = document.createElement('div');
+menuEliminarMensaje.id = 'menuEliminarMensaje';
+menuEliminarMensaje.className = 'menu-eliminar oculto';
+menuEliminarMensaje.innerHTML = `
+  <div class="opcion-eliminar" id="opcionEliminarMensaje">
+    <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+    <span>Eliminar mensaje</span>
+  </div>
+`;
+document.body.appendChild(menuEliminarMensaje);
+const opcionEliminarMensaje = document.getElementById('opcionEliminarMensaje');
+
 let chatPulsado = null;
+let mensajePulsado = null;
+let indiceMensajePulsado = null;
 let temporizadorPulsar = null;
 
 // Barra Llamada Activa
@@ -79,48 +231,22 @@ const quienLlama = document.getElementById('quienLlama');
 const btnRechazar = document.getElementById('btnRechazar');
 const btnResponder = document.getElementById('btnResponder');
 
-// Menú tipo de llamada
-let menuTipoLlamada = null;
-
 // Inputs archivos
 const inputImagen = document.getElementById('inputImagen');
 const inputVideo = document.getElementById('inputVideo');
 
 // ---------- VARIABLES GLOBALES ----------
-let miNumero = localStorage.getItem('codex_numero') || '';
-let miNombreGuardado = localStorage.getItem('codex_nombre') || '';
+let miNumero = '';
+let miNombreGuardado = '';
 let peer = null;
 let conexionActiva = null;
 let llamadaActiva = null;
 let llamadaEntrante = null;
 let streamLocal = null;
-let conexionSaliente = null;
 let contactoActual = null;
-
-// ⚠️ ¡CLAVE! Leemos TODO desde localStorage al iniciar
 let conversaciones = {};
 let contactos = {};
 let historialLlamadas = [];
-
-function cargarDatos() {
-  try {
-    const chatsGuardados = localStorage.getItem('codex_chats');
-    const contactosGuardados = localStorage.getItem('codex_contactos');
-    const llamadasGuardadas = localStorage.getItem('codex_llamadas');
-    
-    conversaciones = chatsGuardados ? JSON.parse(chatsGuardados) : {};
-    contactos = contactosGuardados ? JSON.parse(contactosGuardados) : {};
-    historialLlamadas = llamadasGuardadas ? JSON.parse(llamadasGuardadas) : [];
-    
-    console.log('✅ Datos cargados:', { conversaciones, contactos, historialLlamadas });
-  } catch (e) {
-    console.error('Error al cargar datos:', e);
-    conversaciones = {};
-    contactos = {};
-    historialLlamadas = [];
-  }
-}
-
 let temporizadorLlamada = null;
 let segundosLlamada = 0;
 let llamadaMinimizada = false;
@@ -130,8 +256,20 @@ let camaraActiva = false;
 let mensajesPendientes = {};
 
 // ---------- INICIALIZACIÓN ----------
-function init() {
-  cargarDatos(); // ⚠️ Primero cargamos TODO
+async function init() {
+  await abrirBaseDatos();
+  
+  // Cargar datos desde IndexedDB
+  miNumero = await obtenerConfigDB('miNumero', '');
+  miNombreGuardado = await obtenerConfigDB('miNombre', '');
+  conversaciones = await obtenerConversacionesDB();
+  contactos = await obtenerContactosDB();
+  historialLlamadas = await obtenerLlamadasDB();
+  
+  console.log('✅ Datos cargados desde IndexedDB');
+  console.log('📋 Conversaciones:', Object.keys(conversaciones).length);
+  console.log('👤 Contactos:', Object.keys(contactos).length);
+  console.log('📞 Llamadas:', historialLlamadas.length);
   
   // Restaurar número
   if (miNumero) {
@@ -140,11 +278,7 @@ function init() {
   }
   
   // Restaurar nombre
-  if (miNombreGuardado) {
-    nombrePerfil.value = miNombreGuardado;
-  } else {
-    nombrePerfil.value = miNumero;
-  }
+  nombrePerfil.value = miNombreGuardado || miNumero;
   
   renderizarContactos();
   renderizarChats();
@@ -162,10 +296,10 @@ function conectarPeer() {
   
   peer = new Peer(miNumero, { host: 'peerjs-server.onrender.com', port: 443, path: '/', secure: true, debug: 0 });
   
-  peer.on('open', () => {
+  peer.on('open', async () => {
     estadoConexion.textContent = 'Conectado ✅';
     estadoConexion.className = 'estado-texto estado-conectado';
-    localStorage.setItem('codex_numero', miNumero);
+    await guardarConfigDB('miNumero', miNumero);
   });
   
   peer.on('connection', (conn) => {
@@ -235,24 +369,23 @@ function conectarConUsuario(destino) {
     console.error('Error conexión:', err);
   });
   
-  conexionSaliente = conn;
   return conn;
 }
 
 // ---------- PROCESAR MENSAJES ----------
-function procesarMensaje(datos, deQuien) {
+async function procesarMensaje(datos, deQuien) {
   switch (datos.tipo) {
     case 'mensaje':
-      recibirMensaje(datos, deQuien);
+      await recibirMensaje(datos, deQuien);
       break;
     case 'estado':
-      actualizarNombreYEstado(deQuien, datos.nombre, datos.conectado);
+      await actualizarNombreYEstado(deQuien, datos.nombre, datos.conectado);
       break;
     case 'recibido':
-      marcarComoEntregado(datos.idMensaje, deQuien);
+      await marcarComoEntregado(datos.idMensaje, deQuien);
       break;
     case 'leido':
-      marcarComoLeido(datos.idChat, deQuien);
+      await marcarComoLeido(datos.idChat, deQuien);
       break;
     case 'fin-llamada':
       finalizarLlamada();
@@ -260,7 +393,7 @@ function procesarMensaje(datos, deQuien) {
   }
 }
 
-function recibirMensaje(datos, deQuien) {
+async function recibirMensaje(datos, deQuien) {
   if (!conversaciones[deQuien]) conversaciones[deQuien] = [];
   
   conversaciones[deQuien].push({
@@ -272,7 +405,7 @@ function recibirMensaje(datos, deQuien) {
     estado: 'recibido'
   });
   
-  guardarConversaciones(); // ⚠️ Guardamos INMEDIATAMENTE
+  await guardarConversacionDB(deQuien, conversaciones[deQuien], conversaciones[deQuien].ultimaLeida);
   
   if (conexionActiva && conexionActiva.open) {
     conexionActiva.send({ tipo: 'recibido', idMensaje: datos.id });
@@ -283,7 +416,7 @@ function recibirMensaje(datos, deQuien) {
       conexionActiva.send({ tipo: 'leido', idChat: deQuien });
     }
     conversaciones[deQuien].ultimaLeida = Date.now();
-    guardarConversaciones();
+    await guardarConversacionDB(deQuien, conversaciones[deQuien], conversaciones[deQuien].ultimaLeida);
   }
   
   renderizarChats();
@@ -296,43 +429,43 @@ function recibirMensaje(datos, deQuien) {
   }
 }
 
-function marcarComoEntregado(idMensaje, deQuien) {
+async function marcarComoEntregado(idMensaje, deQuien) {
   if (!conversaciones[deQuien]) return;
   const msg = conversaciones[deQuien].find(m => m.id === idMensaje && m.propio);
   if (msg && msg.estado === 'enviado') {
     msg.estado = 'entregado';
-    guardarConversaciones();
+    await guardarConversacionDB(deQuien, conversaciones[deQuien], conversaciones[deQuien].ultimaLeida);
     if (contactoActual === deQuien) renderizarMensajes(deQuien);
   }
 }
 
-function marcarComoLeido(idChat, deQuien) {
+async function marcarComoLeido(idChat, deQuien) {
   if (!conversaciones[deQuien]) return;
   conversaciones[deQuien].forEach(m => {
     if (m.propio && m.estado !== 'leido') m.estado = 'leido';
   });
   conversaciones[deQuien].ultimaLeida = Date.now();
-  guardarConversaciones();
+  await guardarConversacionDB(deQuien, conversaciones[deQuien], conversaciones[deQuien].ultimaLeida);
   renderizarChats();
   if (contactoActual === deQuien) renderizarMensajes(deQuien);
 }
 
-function actualizarNombreYEstado(numero, nombre, conectado) {
-  if (!contactos[numero]) contactos[numero] = { nombre: numero };
+async function actualizarNombreYEstado(numero, nombre, conectado) {
+  if (!contactos[numero]) contactos[numero] = { numero, nombre };
   if (nombre && nombre !== numero) contactos[numero].nombre = nombre;
   contactos[numero].conectado = conectado;
   contactos[numero].ultimaVisto = conectado ? 'En línea' : 'Desconectado';
-  guardarContactos(); // ⚠️ Guardamos cambios
+  await guardarContactoDB(numero, contactos[numero]);
   renderizarContactos();
   renderizarChats();
   if (contactoActual === numero) actualizarSubtituloChat(numero);
 }
 
-function actualizarEstadoContacto(numero, conectado) {
+async function actualizarEstadoContacto(numero, conectado) {
   if (contactos[numero]) {
     contactos[numero].conectado = conectado;
     contactos[numero].ultimaVisto = conectado ? 'En línea' : 'Desconectado';
-    guardarContactos();
+    await guardarContactoDB(numero, contactos[numero]);
     renderizarContactos();
     renderizarChats();
     if (contactoActual === numero) actualizarSubtituloChat(numero);
@@ -348,21 +481,19 @@ function actualizarSubtituloChat(numero) {
 function abrirChat(numero) {
   contactoActual = numero;
   
-  // ⚠️ Si el contacto no existe, lo creamos automáticamente
   if (!contactos[numero]) {
-    contactos[numero] = { nombre: numero };
-    guardarContactos();
-    renderizarContactos();
+    contactos[numero] = { numero, nombre: numero };
+    guardarContactoDB(numero, contactos[numero]);
   }
   
   document.body.classList.add('con-chat-abierto');
   pantallaPrincipal.classList.remove('activa');
   pantallaChat.classList.add('activa');
   
-  const nombreMostrar = contactos[numero]?.nombre || numero;
+  const nombreMostrar = contactos[numero]?.nombrePersonal || contactos[numero]?.nombre || numero;
   textoNombreChat.textContent = nombreMostrar;
   numeroPerfil.textContent = numero;
-  inicialPerfil.textContent = (contactos[numero]?.nombre || numero).charAt(0).toUpperCase();
+  inicialPerfil.textContent = nombreMostrar.charAt(0).toUpperCase();
   nombrePerfil.value = contactos[numero]?.nombrePersonal || contactos[numero]?.nombre || numero;
   
   if (contactos[numero]?.conectado) {
@@ -378,7 +509,7 @@ function abrirChat(numero) {
     if (conexionActiva && conexionActiva.open) {
       conexionActiva.send({ tipo: 'leido', idChat: numero });
     }
-    guardarConversaciones();
+    guardarConversacionDB(numero, conversaciones[numero], conversaciones[numero].ultimaLeida);
   }
   
   renderizarMensajes(numero);
@@ -398,7 +529,7 @@ function cerrarChat() {
   menuOpciones.classList.remove('mostrar');
 }
 
-function enviarMensaje(texto, tipo = 'texto', datosExtra = null) {
+async function enviarMensaje(texto, tipo = 'texto', datosExtra = null) {
   if (!contactoActual) return;
   if (!conversaciones[contactoActual]) conversaciones[contactoActual] = [];
   
@@ -415,7 +546,7 @@ function enviarMensaje(texto, tipo = 'texto', datosExtra = null) {
   };
   
   conversaciones[contactoActual].push(mensaje);
-  guardarConversaciones(); // ⚠️ Guardamos inmediatamente
+  await guardarConversacionDB(contactoActual, conversaciones[contactoActual], conversaciones[contactoActual].ultimaLeida);
   
   if (conexionActiva && conexionActiva.open) {
     conexionActiva.send({
@@ -441,13 +572,14 @@ function renderizarMensajes(numero) {
   const mensajes = conversaciones[numero] || [];
   
   if (mensajes.length === 0) {
-    cajaMensajes.innerHTML = '<p class="texto-vacio">No hay mensajes aún. ¡Escribe el primero!</p>';
+    cajaMensajes.innerHTML = '<p class="texto-vacio">No hay mensajes aún.<br>¡Escribe el primero!</p>';
     return;
   }
   
-  mensajes.forEach(msg => {
+  mensajes.forEach((msg, indice) => {
     const div = document.createElement('div');
     div.className = `mensaje ${msg.propio ? 'propio' : 'otro'}`;
+    div.dataset.indice = indice;
     
     if (msg.tipoMensaje === 'texto') {
       div.innerHTML = `
@@ -468,35 +600,80 @@ function renderizarMensajes(numero) {
       div.querySelector('video').onclick = () => abrirVisor(msg.texto, 'video');
     }
     
+    // Mantener presionado para eliminar mensaje
+    agregarEventoPulsar(div, () => {
+      mensajePulsado = numero;
+      indiceMensajePulsado = indice;
+      mostrarMenuEliminarMensaje();
+    });
+    
     cajaMensajes.appendChild(div);
   });
   
   cajaMensajes.scrollTop = cajaMensajes.scrollHeight;
 }
 
-function eliminarConversacion(numero) {
+async function eliminarConversacion(numero) {
   if (confirm('¿Eliminar esta conversación?')) {
     delete conversaciones[numero];
-    guardarConversaciones();
+    await eliminarConversacionDB(numero);
     renderizarChats();
     renderizarContactos();
     menuEliminarChat.classList.add('oculto');
   }
 }
 
-// ---------- LLAMADAS - CORREGIDO ----------
+async function eliminarUnMensaje(numero, indice) {
+  if (confirm('¿Eliminar este mensaje?')) {
+    conversaciones[numero].splice(indice, 1);
+    if (conversaciones[numero].length === 0) {
+      delete conversaciones[numero];
+      await eliminarConversacionDB(numero);
+      cerrarChat();
+      renderizarChats();
+    } else {
+      await guardarConversacionDB(numero, conversaciones[numero], conversaciones[numero].ultimaLeida);
+      renderizarMensajes(numero);
+    }
+    menuEliminarMensaje.classList.add('oculto');
+  }
+}
+
+// ---------- MENÚS ELIMINAR ----------
+function mostrarMenuEliminar() {
+  menuEliminarChat.classList.remove('oculto');
+  setTimeout(() => {
+    document.addEventListener('click', cerrarMenuEliminar, { once: true });
+  }, 10);
+}
+
+function cerrarMenuEliminar() {
+  menuEliminarChat.classList.add('oculto');
+  chatPulsado = null;
+}
+
+function mostrarMenuEliminarMensaje() {
+  menuEliminarMensaje.classList.remove('oculto');
+  setTimeout(() => {
+    document.addEventListener('click', cerrarMenuEliminarMensaje, { once: true });
+  }, 10);
+}
+
+function cerrarMenuEliminarMensaje() {
+  menuEliminarMensaje.classList.add('oculto');
+  mensajePulsado = null;
+  indiceMensajePulsado = null;
+}
+
+// ---------- LLAMADAS ----------
 function mostrarMenuTipoLlamada() {
   if (!contactoActual) return;
-  
-  // El que LLAMA elige el tipo, NO el que recibe
   const tipoLlamada = confirm('¿Llamada con video?\n\n✅ Aceptar = Videollamada\n❌ Cancelar = Llamada de voz');
   iniciarLlamada(contactoActual, tipoLlamada);
 }
 
 async function iniciarLlamada(numeroDestino, esVideo = false) {
   try {
-    console.log(`📞 Iniciando ${esVideo ? 'VIDEOLLAMADA' : 'LLAMADA'} a:`, numeroDestino);
-    
     streamLocal = await navigator.mediaDevices.getUserMedia({ 
       audio: true, 
       video: esVideo 
@@ -504,50 +681,43 @@ async function iniciarLlamada(numeroDestino, esVideo = false) {
     
     llamadaActiva = peer.call(numeroDestino, streamLocal);
     
-    const nombreDestino = contactos[numeroDestino]?.nombre || numeroDestino;
+    const nombreDestino = contactos[numeroDestino]?.nombrePersonal || contactos[numeroDestino]?.nombre || numeroDestino;
     numeroLlamadaBarra.textContent = nombreDestino;
     numeroLlamadaGrande.textContent = nombreDestino;
     avatarLlamada.textContent = nombreDestino.charAt(0).toUpperCase();
     
-    // ⚠️ Mostramos AMBAS barras
     barraLlamadaActiva.classList.remove('oculto');
     pantallaLlamada.classList.add('activa');
     estadoLlamada.textContent = 'Llamando...';
     
-    iniciarTemporizador(); // ⚠️ Iniciamos el reloj
+    iniciarTemporizador();
     
-    llamadaActiva.on('stream', (streamRemoto) => {
-      console.log('📡 Llamada conectada');
+    llamadaActiva.on('stream', () => {
       estadoLlamada.textContent = 'En llamada';
     });
     
     llamadaActiva.on('close', finalizarLlamada);
-    llamadaActiva.on('error', (err) => {
-      console.error('Error en llamada:', err);
-      finalizarLlamada();
-    });
+    llamadaActiva.on('error', finalizarLlamada);
     
-    registrarLlamada(numeroDestino, 'saliente');
+    await registrarLlamada(numeroDestino, 'saliente');
     
   } catch (err) {
-    console.error('❌ Error al iniciar llamada:', err);
-    alert('No se pudo acceder al micrófono/cámara: ' + err.message);
+    console.error('Error al iniciar llamada:', err);
+    alert('No se pudo acceder al micrófono/cámara');
   }
 }
 
 function manejarLlamadaEntrante(call) {
-  console.log('📞 Llamada entrante de:', call.peer);
   llamadaEntrante = call;
   const deQuien = call.peer;
   
-  // ⚠️ Si no tenemos al contacto, lo agregamos automáticamente
   if (!contactos[deQuien]) {
-    contactos[deQuien] = { nombre: deQuien };
-    guardarContactos();
+    contactos[deQuien] = { numero: deQuien, nombre: deQuien };
+    guardarContactoDB(deQuien, contactos[deQuien]);
     renderizarContactos();
   }
   
-  const nombreLLamador = contactos[deQuien]?.nombre || deQuien;
+  const nombreLLamador = contactos[deQuien]?.nombrePersonal || contactos[deQuien]?.nombre || deQuien;
   numeroLlamadaBarra.textContent = nombreLLamador;
   quienLlama.textContent = nombreLLamador;
   avatarLlamadaEntrante.textContent = nombreLLamador.charAt(0).toUpperCase();
@@ -564,12 +734,11 @@ async function responderLlamada() {
   pantallaLlamadaEntrante.classList.add('oculto');
   
   try {
-    console.log('📞 Respondiendo llamada...');
     streamLocal = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     llamadaEntrante.answer(streamLocal);
     llamadaActiva = llamadaEntrante;
     
-    const nombreLLamador = contactos[llamadaActiva.peer]?.nombre || llamadaActiva.peer;
+    const nombreLLamador = contactos[llamadaActiva.peer]?.nombrePersonal || contactos[llamadaActiva.peer]?.nombre || llamadaActiva.peer;
     numeroLlamadaGrande.textContent = nombreLLamador;
     avatarLlamada.textContent = nombreLLamador.charAt(0).toUpperCase();
     
@@ -585,7 +754,7 @@ async function responderLlamada() {
     llamadaActiva.on('error', finalizarLlamada);
     
   } catch (err) {
-    console.error('❌ Error al responder:', err);
+    console.error('Error al responder:', err);
     finalizarLlamada();
   }
 }
@@ -596,8 +765,6 @@ function rechazarLlamada() {
 }
 
 function finalizarLlamada() {
-  console.log('📞 Colgando llamada...');
-  
   if (llamadaActiva) {
     try { llamadaActiva.close(); } catch(e) {}
     llamadaActiva = null;
@@ -692,19 +859,16 @@ function actualizarTiempoLlamada() {
   tiempoLlamadaGrande.textContent = `${m}:${s}`;
 }
 
-function registrarLlamada(numero, tipo) {
+async function registrarLlamada(numero, tipo) {
   const nuevaLlamada = {
     numero,
-    nombre: contactos[numero]?.nombre || numero,
+    nombre: contactos[numero]?.nombrePersonal || contactos[numero]?.nombre || numero,
     tipo,
     fecha: new Date().toLocaleString()
   };
   
   historialLlamadas.unshift(nuevaLlamada);
-  if (historialLlamadas.length > 100) historialLlamadas = historialLlamadas.slice(0, 100);
-  
-  localStorage.setItem('codex_llamadas', JSON.stringify(historialLlamadas));
-  console.log('📝 Llamada guardada:', nuevaLlamada);
+  await guardarLlamadaDB(nuevaLlamada);
   renderizarLlamadas();
 }
 
@@ -726,7 +890,9 @@ function renderizarContactos() {
       <div class="nombre-contacto">${c.nombrePersonal || c.nombre || num}</div>
       <div class="info-mensaje">${c.conectado ? '🟢 En línea' : '⚪ Desconectado'}</div>
     `;
-    div.onclick = () => abrirChat(num);
+    // ✅ TOCAR UNA VEZ → ABRIR PERFIL, NO DIRECTO AL CHAT
+    div.onclick = () => abrirPerfil(num);
+    // ✅ MANTENER PRESIONADO → ELIMINAR CHAT
     agregarEventoPulsar(div, () => {
       chatPulsado = num;
       mostrarMenuEliminar();
@@ -759,7 +925,9 @@ function renderizarChats() {
       <div class="info-mensaje">${ultimo.texto.substring(0, 25)}${ultimo.texto.length > 25 ? '...' : ''} · ${ultimo.hora}</div>
       ${sinLeer > 0 ? '<div class="punto-sin-leer"></div>' : ''}
     `;
+    // ✅ TOCAR UNA VEZ → ABRIR CHAT
     div.onclick = () => abrirChat(num);
+    // ✅ MANTENER PRESIONADO → ELIMINAR CONVERSACIÓN
     agregarEventoPulsar(div, () => {
       chatPulsado = num;
       mostrarMenuEliminar();
@@ -807,30 +975,23 @@ function actualizarContadorSinLeer() {
   }
 }
 
-// ---------- ELIMINAR CHAT AL MANTENER PULSADO ----------
+// ---------- DETECTAR PULSACIÓN LARGA ----------
 function agregarEventoPulsar(elemento, callback) {
-  elemento.addEventListener('touchstart', () => {
+  // Versión táctil
+  elemento.addEventListener('touchstart', (e) => {
+    e.preventDefault();
     temporizadorPulsar = setTimeout(callback, 600);
-  });
+  }, { passive: false });
+  
   elemento.addEventListener('touchend', () => clearTimeout(temporizadorPulsar));
   elemento.addEventListener('touchmove', () => clearTimeout(temporizadorPulsar));
+  
+  // Versión ratón
   elemento.addEventListener('mousedown', () => {
     temporizadorPulsar = setTimeout(callback, 600);
   });
   elemento.addEventListener('mouseup', () => clearTimeout(temporizadorPulsar));
   elemento.addEventListener('mouseleave', () => clearTimeout(temporizadorPulsar));
-}
-
-function mostrarMenuEliminar() {
-  menuEliminarChat.classList.remove('oculto');
-  setTimeout(() => {
-    document.addEventListener('click', cerrarMenuEliminar, { once: true });
-  }, 10);
-}
-
-function cerrarMenuEliminar() {
-  menuEliminarChat.classList.add('oculto');
-  chatPulsado = null;
 }
 
 // ---------- PERFIL DE USUARIO ----------
@@ -844,20 +1005,27 @@ function abrirPerfil(numero) {
     textoEstado.textContent = 'En línea';
   } else {
     puntoEstado.classList.remove('conectado');
-    textoEstado.textContent = contactos[numero]?.ultimaVisto || 'Desconectado';
+    textoEstado.textContent = contactos[numero]?.ultimaVisto || 'Desconocido';
   }
   
   perfilUsuarioModal.classList.remove('oculto');
 }
 
-function guardarNombreContacto() {
+async function guardarNombreContacto() {
   if (contactoActual) {
-    if (!contactos[contactoActual]) contactos[contactoActual] = { nombre: contactoActual };
+    if (!contactos[contactoActual]) contactos[contactoActual] = { numero: contactoActual, nombre: contactoActual };
     contactos[contactoActual].nombrePersonal = nombrePerfil.value.trim() || contactoActual;
-    guardarContactos();
+    await guardarContactoDB(contactoActual, contactos[contactoActual]);
     renderizarContactos();
     renderizarChats();
     textoNombreChat.textContent = contactos[contactoActual].nombrePersonal;
+  } else {
+    // Si venimos desde la lista de contactos sin abrir chat
+    const num = numeroPerfil.textContent;
+    if (!contactos[num]) contactos[num] = { numero: num, nombre: num };
+    contactos[num].nombrePersonal = nombrePerfil.value.trim() || num;
+    await guardarContactoDB(num, contactos[num]);
+    renderizarContactos();
   }
   perfilUsuarioModal.classList.add('oculto');
 }
@@ -872,31 +1040,15 @@ function abrirVisor(src, tipo) {
   visor.classList.remove('oculto');
 }
 
-// ---------- GUARDADO LOCAL - CORREGIDO ----------
-function guardarConversaciones() {
-  try {
-    localStorage.setItem('codex_chats', JSON.stringify(conversaciones));
-    console.log('💬 Conversaciones guardadas:', Object.keys(conversaciones).length);
-  } catch (e) {
-    console.error('❌ Error guardando conversaciones:', e);
-  }
-}
-
-function guardarContactos() {
-  try {
-    localStorage.setItem('codex_contactos', JSON.stringify(contactos));
-    console.log('👤 Contactos guardados:', Object.keys(contactos).length);
-  } catch (e) {
-    console.error('❌ Error guardando contactos:', e);
-  }
-}
-
 // ---------- EVENTOS ----------
 function configurarEventos() {
   // Conectar
-  btnConectar.onclick = () => {
+  btnConectar.onclick = async () => {
     miNumero = miNumeroInput.value.trim();
-    if (miNumero) conectarPeer();
+    if (miNumero) {
+      await guardarConfigDB('miNumero', miNumero);
+      conectarPeer();
+    }
   };
   
   // Menú pestañas
@@ -911,20 +1063,22 @@ function configurarEventos() {
   });
   
   // Agregar usuario
-  btnAgregarUsuario.onclick = () => {
+  btnAgregarUsuario.onclick = async () => {
     const num = numeroDestinoInput.value.trim();
     if (!num) return;
-    if (!contactos[num]) contactos[num] = { nombre: num };
-    guardarContactos();
+    if (!contactos[num]) {
+      contactos[num] = { numero: num, nombre: num };
+      await guardarContactoDB(num, contactos[num]);
+    }
     renderizarContactos();
     numeroDestinoInput.value = '';
-    abrirChat(num);
+    abrirPerfil(num); // ✅ Abre perfil, NO directo al chat
   };
   
   // Chat
   btnVolver.onclick = cerrarChat;
   btnVerPerfil.onclick = () => contactoActual && abrirPerfil(contactoActual);
-  btnLlamar.onclick = mostrarMenuTipoLlamada; // ⚠️ Ahora muestra menú antes de llamar
+  btnLlamar.onclick = mostrarMenuTipoLlamada;
   btnEnviar.onclick = () => {
     if (inputMensaje.value.trim()) {
       enviarMensaje(inputMensaje.value.trim());
@@ -989,9 +1143,16 @@ function configurarEventos() {
     if (contactoActual) abrirChat(contactoActual);
   };
   
-  // Eliminar chat
+  // Eliminar conversación
   opcionEliminarChat.onclick = () => {
     if (chatPulsado) eliminarConversacion(chatPulsado);
+  };
+  
+  // Eliminar mensaje individual
+  opcionEliminarMensaje.onclick = () => {
+    if (mensajePulsado && indiceMensajePulsado !== null) {
+      eliminarUnMensaje(mensajePulsado, indiceMensajePulsado);
+    }
   };
   
   // Perfil
@@ -1021,4 +1182,4 @@ function configurarEventos() {
 
 // Iniciar todo 🚀
 init();
-console.log('✅ CODEx cargado correctamente');
+console.log('✅ CODEx con IndexedDB cargado correctamente');
