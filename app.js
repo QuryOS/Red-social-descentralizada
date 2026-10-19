@@ -1,13 +1,18 @@
 // ==========================================
-// ELEMENTOS DEL HTML
+// CODEx - JavaScript Completo
 // ==========================================
+
+// ---------- ELEMENTOS DEL DOM ----------
 const miNumeroInput = document.getElementById('miNumero');
 const btnConectar = document.getElementById('btnConectar');
 const estadoConexion = document.getElementById('estadoConexion');
+const itemsMenu = document.querySelectorAll('.item-menu');
+const vistas = document.querySelectorAll('.vista-pestana');
 const numeroDestinoInput = document.getElementById('numeroDestino');
 const btnAgregarUsuario = document.getElementById('btnAgregarUsuario');
 const listaContactos = document.getElementById('listaContactos');
 const listaChats = document.getElementById('listaChats');
+const listaLlamadas = document.getElementById('listaLlamadas');
 const sinChats = document.getElementById('sinChats');
 const sinLlamadas = document.getElementById('sinLlamadas');
 const contadorGlobalSinLeer = document.getElementById('contadorGlobalSinLeer');
@@ -15,421 +20,912 @@ const contadorGlobalSinLeer = document.getElementById('contadorGlobalSinLeer');
 const pantallaPrincipal = document.getElementById('pantallaPrincipal');
 const pantallaChat = document.getElementById('pantallaChat');
 const nombreChat = document.getElementById('nombreChat');
+const textoNombreChat = document.getElementById('textoNombreChat');
+const subtituloChat = document.getElementById('subtituloChat');
 const cajaMensajes = document.getElementById('cajaMensajes');
-const btnVolver = document.getElementById('btnVolver');
-const btnOpciones = document.getElementById('btnOpciones');
-const menuOpciones = document.getElementById('menuOpciones');
 const inputMensaje = document.getElementById('inputMensaje');
 const btnEnviar = document.getElementById('btnEnviar');
+const btnVolver = document.getElementById('btnVolver');
+const btnLlamar = document.getElementById('btnLlamar');
+const btnVerPerfil = document.getElementById('btnVerPerfil');
+const btnOpciones = document.getElementById('btnOpciones');
+const menuOpciones = document.getElementById('menuOpciones');
+
+// Perfil Modal
+const perfilUsuarioModal = document.getElementById('perfilUsuarioModal');
+const btnCerrarPerfil = document.getElementById('btnCerrarPerfil');
+const fotoPerfilGrande = document.getElementById('fotoPerfilGrande');
+const inicialPerfil = document.getElementById('inicialPerfil');
+const puntoEstado = document.querySelector('.punto-estado');
+const textoEstado = document.getElementById('textoEstado');
+const nombrePerfil = document.getElementById('nombrePerfil');
+const numeroPerfil = document.getElementById('numeroPerfil');
+const btnEditarNombre = document.getElementById('btnEditarNombre');
+const btnGuardarPerfil = document.getElementById('btnGuardarPerfil');
+
+// Eliminar Chat
+const menuEliminarChat = document.getElementById('menuEliminarChat');
+const opcionEliminarChat = document.getElementById('opcionEliminarChat');
+let chatPulsado = null;
+let temporizadorPulsar = null;
+
+// Barra Llamada Activa
+const barraLlamadaActiva = document.getElementById('barraLlamadaActiva');
+const numeroLlamadaBarra = document.getElementById('numeroLlamadaBarra');
+const tiempoLlamadaBarra = document.getElementById('tiempoLlamadaBarra');
+const btnMinimizarLlamada = document.getElementById('btnMinimizarLlamada');
+const btnSilenciarBarra = document.getElementById('btnSilenciarBarra');
+const btnAltavozBarra = document.getElementById('btnAltavozBarra');
+const btnCamaraBarra = document.getElementById('btnCamaraBarra');
+const btnChatDesdeLlamada = document.getElementById('btnChatDesdeLlamada');
+const btnColgarBarra = document.getElementById('btnColgarBarra');
+
+// Pantalla Llamada
+const pantallaLlamada = document.getElementById('pantallaLlamada');
+const estadoLlamada = document.getElementById('estadoLlamada');
+const avatarLlamada = document.getElementById('avatarLlamada');
+const numeroLlamadaGrande = document.getElementById('numeroLlamadaGrande');
+const tiempoLlamadaGrande = document.getElementById('tiempoLlamadaGrande');
+const btnSilenciarLlamada = document.getElementById('btnSilenciarLlamada');
+const btnAltavozLlamada = document.getElementById('btnAltavozLlamada');
+const btnCamaraLlamada = document.getElementById('btnCamaraLlamada');
+const btnMinimizarPantallaLlamada = document.getElementById('btnMinimizarPantallaLlamada');
+const btnColgarPantalla = document.getElementById('btnColgarPantalla');
+
+// Llamada Entrante
+const pantallaLlamadaEntrante = document.getElementById('pantallaLlamadaEntrante');
+const avatarLlamadaEntrante = document.getElementById('avatarLlamadaEntrante');
+const quienLlama = document.getElementById('quienLlama');
+const btnRechazar = document.getElementById('btnRechazar');
+const btnResponder = document.getElementById('btnResponder');
+
+// Inputs archivos
 const inputImagen = document.getElementById('inputImagen');
 const inputVideo = document.getElementById('inputVideo');
-const opcionesEnvio = document.querySelectorAll('.opcion-envio');
 
-const visorCompleto = document.getElementById('visorCompleto');
-const contenidoVisor = document.getElementById('contenidoVisor');
-const btnCerrarVisor = document.getElementById('btnCerrarVisor');
+// ---------- VARIABLES GLOBALES ----------
+let miNumero = localStorage.getItem('codex_numero') || '';
+let miNombreGuardado = localStorage.getItem('codex_nombre') || '';
+let peer = null;
+let conexionActiva = null;
+let llamadaActiva = null;
+let llamadaEntrante = null;
+let streamLocal = null;
+let conexionSaliente = null;
+let contactoActual = null;
+let conversaciones = JSON.parse(localStorage.getItem('codex_chats') || '{}');
+let contactos = JSON.parse(localStorage.getItem('codex_contactos') || '{}');
+let historialLlamadas = JSON.parse(localStorage.getItem('codex_llamadas') || '[]');
+let temporizadorLlamada = null;
+let segundosLlamada = 0;
+let llamadaMinimizada = false;
+let silenciado = false;
+let altavozActivo = true;
+let camaraActiva = false;
+let mensajesPendientes = {};
 
-const itemsMenu = document.querySelectorAll('.item-menu');
-const vistas = document.querySelectorAll('.vista-pestana');
-
-// ==========================================
-// VARIABLES GLOBALES
-// ==========================================
-let baseDatos = null;
-let contactos = {};
-let chatActivo = null;
-let miNumero = '';
-
-// ==========================================
-// BASE DE DATOS — IndexedDB
-// ==========================================
-function abrirBaseDatos() {
-  return new Promise((res, rej) => {
-    const solicitud = indexedDB.open('CodexDB_Mensajes', 1);
-    
-    solicitud.onupgradeneeded = e => {
-      baseDatos = e.target.result;
-      
-      if (!baseDatos.objectStoreNames.contains('perfil')) {
-        baseDatos.createObjectStore('perfil');
-      }
-      
-      if (!baseDatos.objectStoreNames.contains('mensajes')) {
-        const store = baseDatos.createObjectStore('mensajes', { autoIncrement: true });
-        store.createIndex('conQuien', 'conQuien', { unique: false });
-      }
-    };
-    
-    solicitud.onsuccess = e => {
-      baseDatos = e.target.result;
-      res();
-    };
-    
-    solicitud.onerror = e => {
-      alert('❌ No se pudo abrir la base de datos');
-      rej(e.target.error);
-    };
-  });
-}
-
-async function guardarPerfil(clave, valor) {
-  return new Promise((res, rej) => {
-    const tx = baseDatos.transaction('perfil', 'readwrite');
-    tx.objectStore('perfil').put(valor, clave);
-    tx.oncomplete = () => res();
-    tx.onerror = e => rej(e.target.error);
-  });
-}
-
-async function leerPerfil(clave) {
-  return new Promise((res, rej) => {
-    const tx = baseDatos.transaction('perfil', 'readonly');
-    const solicitud = tx.objectStore('perfil').get(clave);
-    solicitud.onsuccess = () => res(solicitud.result || null);
-    solicitud.onerror = e => rej(e.target.error);
-  });
-}
-
-async function guardarMensaje(conQuien, texto, esMio, tipo = 'texto', datosArchivo = '') {
-  return new Promise((res, rej) => {
-    const tx = baseDatos.transaction('mensajes', 'readwrite');
-    const mensaje = {
-      conQuien: conQuien,
-      texto: texto,
-      tipo: tipo,
-      datosArchivo: datosArchivo,
-      esMio: esMio,
-      fecha: new Date().toLocaleString()
-    };
-    
-    tx.objectStore('mensajes').add(mensaje);
-    
-    tx.oncomplete = () => {
-      if (!contactos[conQuien]) {
-        contactos[conQuien] = { mensajes: [], ultimoMensaje: '' };
-      }
-      contactos[conQuien].mensajes.push(mensaje);
-      contactos[conQuien].ultimoMensaje = tipo === 'imagen' ? '[Imagen]' : 
-                                          tipo === 'video' ? '[Video]' : texto;
-      res();
-    };
-    
-    tx.onerror = () => {
-      alert('❌ No se pudo guardar el mensaje');
-      rej(tx.error);
-    };
-  });
-}
-
-async function cargarTodosLosMensajes() {
-  return new Promise((res, rej) => {
-    if (!baseDatos) {
-      alert('❌ Base de datos no disponible');
-      return res({});
-    }
-    
-    const tx = baseDatos.transaction('mensajes', 'readonly');
-    const todos = tx.objectStore('mensajes').getAll();
-    
-    todos.onsuccess = () => {
-      const lista = todos.result;
-      contactos = {};
-      
-      lista.forEach(msg => {
-        if (!msg.conQuien) return;
-        if (!contactos[msg.conQuien]) {
-          contactos[msg.conQuien] = { mensajes: [], ultimoMensaje: '' };
-        }
-        contactos[msg.conQuien].mensajes.push(msg);
-        contactos[msg.conQuien].ultimoMensaje = msg.tipo === 'imagen' ? '[Imagen]' : 
-                                                  msg.tipo === 'video' ? '[Video]' : msg.texto;
-      });
-      
-      alert(`✅ Cargados ${lista.length} mensajes guardados`);
-      res();
-    };
-    
-    todos.onerror = () => {
-      alert('❌ No se pudieron leer los mensajes');
-      rej(todos.error);
-    };
-  });
-}
-
-// ==========================================
-// RENDERIZAR MENSAJE EN PANTALLA
-// ==========================================
-function mostrarMensajeEnChat(msg) {
-  const div = document.createElement('div');
-  div.className = `mensaje ${msg.esMio ? 'propio' : 'otro'}`;
-  
-  if (msg.tipo === 'texto' || msg.tipo === 'mensaje') {
-    div.innerHTML = `
-      <p>${msg.texto || ''}</p>
-      <p class="hora">${msg.fecha}</p>
-    `;
-  } else if (msg.tipo === 'imagen') {
-    div.innerHTML = `
-      <img src="${msg.datosArchivo}" onclick="abrirVisor('${msg.datosArchivo}', 'imagen')">
-      <p class="hora">${msg.fecha}</p>
-    `;
-  } else if (msg.tipo === 'video') {
-    div.innerHTML = `
-      <video controls><source src="${msg.datosArchivo}"></video>
-      <p class="hora">${msg.fecha}</p>
-    `;
+// ---------- INICIALIZACIÓN ----------
+function init() {
+  // Restaurar número
+  if (miNumero) {
+    miNumeroInput.value = miNumero;
+    conectarPeer();
   }
   
-  cajaMensajes.appendChild(div);
+  // Restaurar nombre
+  if (miNombreGuardado) {
+    nombrePerfil.value = miNombreGuardado;
+  } else {
+    nombrePerfil.value = miNumero;
+  }
+  
+  renderizarContactos();
+  renderizarChats();
+  renderizarLlamadas();
+  actualizarContadorSinLeer();
+  configurarEventos();
+}
+
+// ---------- CONEXIÓN PEERJS ----------
+function conectarPeer() {
+  if (!miNumero) return;
+  
+  estadoConexion.textContent = 'Conectando...';
+  estadoConexion.className = 'estado-texto estado-reintentando';
+  
+  peer = new Peer(miNumero, { host: 'peerjs-server.onrender.com', port: 443, path: '/', secure: true, debug: 0 });
+  
+  peer.on('open', () => {
+    estadoConexion.textContent = 'Conectado ✅';
+    estadoConexion.className = 'estado-texto estado-conectado';
+    localStorage.setItem('codex_numero', miNumero);
+  });
+  
+  peer.on('connection', (conn) => {
+    manejarConexionEntrante(conn);
+  });
+  
+  peer.on('call', (call) => {
+    manejarLlamadaEntrante(call);
+  });
+  
+  peer.on('close', () => {
+    estadoConexion.textContent = 'Desconectado';
+    estadoConexion.className = 'estado-texto estado-desconectado';
+    setTimeout(conectarPeer, 5000); // Reconexión automática
+  });
+  
+  peer.on('error', (err) => {
+    console.error('Error Peer:', err);
+    estadoConexion.textContent = 'Reconectando...';
+    estadoConexion.className = 'estado-texto estado-reintentando';
+    setTimeout(conectarPeer, 5000);
+  });
+}
+
+// ---------- MANEJAR CONEXIONES ----------
+function manejarConexionEntrante(conn) {
+  conexionActiva = conn;
+  const numeroRemitente = conn.peer;
+  
+  conn.on('data', (datos) => {
+    procesarMensaje(datos, numeroRemitente);
+  });
+  
+  conn.on('close', () => {
+    actualizarEstadoContacto(numeroRemitente, false);
+  });
+  
+  conn.on('error', () => {
+    actualizarEstadoContacto(numeroRemitente, false);
+  });
+  
+  // Enviar estado de conexión
+  conn.send({ tipo: 'estado', de: miNumero, nombre: miNombreGuardado || miNumero, conectado: true });
+  actualizarEstadoContacto(numeroRemitente, true);
+}
+
+function conectarConUsuario(destino) {
+  if (!peer) return;
+  
+  const conn = peer.connect(destino);
+  
+  conn.on('open', () => {
+    conexionActiva = conn;
+    
+    conn.on('data', (datos) => {
+      procesarMensaje(datos, destino);
+    });
+    
+    conn.on('close', () => {
+      actualizarEstadoContacto(destino, false);
+    });
+    
+    // Enviar nuestro estado
+    conn.send({ tipo: 'estado', de: miNumero, nombre: miNombreGuardado || miNumero, conectado: true });
+    actualizarEstadoContacto(destino, true);
+  });
+  
+  conn.on('error', (err) => {
+    console.error('Error conexión:', err);
+  });
+  
+  conexionSaliente = conn;
+  return conn;
+}
+
+// ---------- PROCESAR MENSAJES ----------
+function procesarMensaje(datos, deQuien) {
+  switch (datos.tipo) {
+    case 'mensaje':
+      recibirMensaje(datos, deQuien);
+      break;
+    case 'estado':
+      actualizarNombreYEstado(deQuien, datos.nombre, datos.conectado);
+      break;
+    case 'recibido':
+      marcarComoEntregado(datos.idMensaje, deQuien);
+      break;
+    case 'leido':
+      marcarComoLeido(datos.idChat, deQuien);
+      break;
+    case 'fin-llamada':
+      finalizarLlamada();
+      break;
+  }
+}
+
+function recibirMensaje(datos, deQuien) {
+  if (!conversaciones[deQuien]) conversaciones[deQuien] = [];
+  
+  conversaciones[deQuien].push({
+    id: datos.id,
+    texto: datos.texto,
+    tipo: datos.tipoMensaje || 'texto',
+    hora: datos.hora,
+    propio: false,
+    estado: 'recibido'
+  });
+  
+  guardarConversaciones();
+  
+  // Notificar que lo recibimos
+  if (conexionActiva) conexionActiva.send({ tipo: 'recibido', idMensaje: datos.id });
+  
+  // Si estamos en este chat, marcar como leído
+  if (contactoActual === deQuien) {
+    if (conexionActiva) conexionActiva.send({ tipo: 'leido', idChat: deQuien });
+    conversaciones[deQuien].ultimaLeida = Date.now();
+  }
+  
+  renderizarChats();
+  renderizarContactos();
+  
+  if (contactoActual === deQuien) {
+    renderizarMensajes(deQuien);
+  } else {
+    actualizarContadorSinLeer();
+  }
+}
+
+function marcarComoEntregado(idMensaje, deQuien) {
+  if (!conversaciones[deQuien]) return;
+  const msg = conversaciones[deQuien].find(m => m.id === idMensaje && m.propio);
+  if (msg && msg.estado === 'enviado') {
+    msg.estado = 'entregado';
+    guardarConversaciones();
+    if (contactoActual === deQuien) renderizarMensajes(deQuien);
+  }
+}
+
+function marcarComoLeido(idChat, deQuien) {
+  if (!conversaciones[deQuien]) return;
+  conversaciones[deQuien].forEach(m => {
+    if (m.propio && m.estado !== 'leido') m.estado = 'leido';
+  });
+  conversaciones[deQuien].ultimaLeida = Date.now();
+  guardarConversaciones();
+  renderizarChats();
+  if (contactoActual === deQuien) renderizarMensajes(deQuien);
+}
+
+function actualizarNombreYEstado(numero, nombre, conectado) {
+  if (!contactos[numero]) contactos[numero] = { nombre: numero };
+  if (nombre && nombre !== numero) contactos[numero].nombre = nombre;
+  contactos[numero].conectado = conectado;
+  contactos[numero].ultimaVisto = conectado ? 'En línea' : 'Desconectado';
+  guardarContactos();
+  renderizarContactos();
+  renderizarChats();
+  if (contactoActual === numero) actualizarSubtituloChat(numero);
+}
+
+function actualizarEstadoContacto(numero, conectado) {
+  if (contactos[numero]) {
+    contactos[numero].conectado = conectado;
+    contactos[numero].ultimaVisto = conectado ? 'En línea' : 'Desconectado';
+    guardarContactos();
+    renderizarContactos();
+    renderizarChats();
+    if (contactoActual === numero) actualizarSubtituloChat(numero);
+  }
+}
+
+function actualizarSubtituloChat(numero) {
+  const c = contactos[numero];
+  if (c) subtituloChat.textContent = c.conectado ? 'En línea' : 'Desconectado';
+}
+
+// ---------- CHATS ----------
+function abrirChat(numero) {
+  contactoActual = numero;
+  document.body.classList.add('con-chat-abierto');
+  pantallaPrincipal.classList.remove('activa');
+  pantallaChat.classList.add('activa');
+  
+  const nombreMostrar = contactos[numero]?.nombre || numero;
+  textoNombreChat.textContent = nombreMostrar;
+  numeroPerfil.textContent = numero;
+  inicialPerfil.textContent = (contactos[numero]?.nombre || numero).charAt(0).toUpperCase();
+  nombrePerfil.value = contactos[numero]?.nombrePersonal || contactos[numero]?.nombre || numero;
+  
+  // Estado en línea
+  if (contactos[numero]?.conectado) {
+    puntoEstado.classList.add('conectado');
+    textoEstado.textContent = 'En línea';
+  } else {
+    puntoEstado.classList.remove('conectado');
+    textoEstado.textContent = contactos[numero]?.ultimaVisto || 'Desconocido';
+  }
+  
+  // Marcar como leído
+  if (conversaciones[numero]) {
+    conversaciones[numero].ultimaLeida = Date.now();
+    if (conexionActiva) conexionActiva.send({ tipo: 'leido', idChat: numero });
+  }
+  
+  renderizarMensajes(numero);
+  actualizarContadorSinLeer();
+  
+  // Conectar si no estamos conectados con este usuario
+  if (!conexionActiva || conexionActiva.peer !== numero) {
+    conectarConUsuario(numero);
+  }
+}
+
+function cerrarChat() {
+  document.body.classList.remove('con-chat-abierto');
+  pantallaChat.classList.remove('activa');
+  pantallaPrincipal.classList.add('activa');
+  contactoActual = null;
+  cajaMensajes.innerHTML = '';
+  menuOpciones.classList.remove('mostrar');
+}
+
+function enviarMensaje(texto, tipo = 'texto', datosExtra = null) {
+  if (!contactoActual) return;
+  if (!conversaciones[contactoActual]) conversaciones[contactoActual] = [];
+  
+  const id = Date.now() + Math.random();
+  const mensaje = {
+    id,
+    texto,
+    tipo: 'mensaje',
+    tipoMensaje: tipo,
+    hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    propio: true,
+    estado: 'enviado',
+    ...datosExtra
+  };
+  
+  conversaciones[contactoActual].push(mensaje);
+  guardarConversaciones();
+  
+  // Enviar por conexión
+  if (conexionActiva && conexionActiva.open) {
+    conexionActiva.send({
+      tipo: 'mensaje',
+      id,
+      texto,
+      tipoMensaje: tipo,
+      hora: mensaje.hora
+    });
+  } else {
+    // Mensaje pendiente: se envía cuando se reconecte
+    if (!mensajesPendientes[contactoActual]) mensajesPendientes[contactoActual] = [];
+    mensajesPendientes[contactoActual].push(mensaje);
+  }
+  
+  renderizarMensajes(contactoActual);
+  renderizarChats();
+  inputMensaje.value = '';
   cajaMensajes.scrollTop = cajaMensajes.scrollHeight;
 }
 
-// ==========================================
-// LISTAS DE CHATS Y CONTACTOS
-// ==========================================
-function actualizarListaChats() {
-  listaChats.innerHTML = '';
-  const hayChats = Object.keys(contactos).length > 0;
-  sinChats.classList.toggle('oculto', hayChats);
+function renderizarMensajes(numero) {
+  cajaMensajes.innerHTML = '';
+  const mensajes = conversaciones[numero] || [];
   
-  if (!hayChats) return;
-  
-  Object.keys(contactos).forEach(numero => {
+  mensajes.forEach(msg => {
     const div = document.createElement('div');
-    div.className = 'item-chat';
-    div.innerHTML = `
-      <div class="nombre-contacto">${numero}</div>
-      <div class="info-mensaje">${contactos[numero].ultimoMensaje || 'Sin mensajes'}</div>
-    `;
-    div.addEventListener('click', () => abrirChat(numero));
-    listaChats.appendChild(div);
+    div.className = `mensaje ${msg.propio ? 'propio' : 'otro'}`;
+    
+    if (msg.tipoMensaje === 'texto') {
+      div.innerHTML = `
+        <div>${msg.texto}</div>
+        <div class="hora">${msg.hora}${msg.propio ? `<span class="estado-mensaje estado-${msg.estado || 'enviado'}"></span>` : ''}</div>
+      `;
+    } else if (msg.tipoMensaje === 'imagen') {
+      div.innerHTML = `
+        <img src="${msg.texto}" loading="lazy">
+        <div class="hora">${msg.hora}${msg.propio ? `<span class="estado-mensaje estado-${msg.estado || 'enviado'}"></span>` : ''}</div>
+      `;
+      div.querySelector('img').onclick = () => abrirVisor(msg.texto, 'imagen');
+    } else if (msg.tipoMensaje === 'video') {
+      div.innerHTML = `
+        <video src="${msg.texto}" controls></video>
+        <div class="hora">${msg.hora}${msg.propio ? `<span class="estado-mensaje estado-${msg.estado || 'enviado'}"></span>` : ''}</div>
+      `;
+      div.querySelector('video').onclick = () => abrirVisor(msg.texto, 'video');
+    }
+    
+    cajaMensajes.appendChild(div);
+  });
+  
+  cajaMensajes.scrollTop = cajaMensajes.scrollHeight;
+}
+
+function eliminarConversacion(numero) {
+  if (confirm('¿Eliminar esta conversación?')) {
+    delete conversaciones[numero];
+    guardarConversaciones();
+    renderizarChats();
+    renderizarContactos();
+    menuEliminarChat.classList.add('oculto');
+  }
+}
+
+// ---------- LLAMADAS ----------
+async function iniciarLlamada(numeroDestino, esVideo = false) {
+  try {
+    streamLocal = await navigator.mediaDevices.getUserMedia({ 
+      audio: true, 
+      video: esVideo 
+    });
+    
+    llamadaActiva = peer.call(numeroDestino, streamLocal);
+    numeroLlamadaBarra.textContent = contactos[numeroDestino]?.nombre || numeroDestino;
+    numeroLlamadaGrande.textContent = contactos[numeroDestino]?.nombre || numeroDestino;
+    avatarLlamada.textContent = (contactos[numeroDestino]?.nombre || numeroDestino).charAt(0).toUpperCase();
+    
+    barraLlamadaActiva.classList.remove('oculto');
+    pantallaLlamada.classList.add('activa');
+    estadoLlamada.textContent = 'Llamando...';
+    iniciarTemporizador();
+    
+    llamadaActiva.on('stream', (streamRemoto) => {
+      estadoLlamada.textContent = 'En llamada';
+    });
+    
+    llamadaActiva.on('close', finalizarLlamada);
+    llamadaActiva.on('error', finalizarLlamada);
+    
+    registrarLlamada(numeroDestino, 'saliente');
+    
+  } catch (err) {
+    console.error('Error al iniciar llamada:', err);
+    alert('No se pudo acceder al micrófono/cámara');
+  }
+}
+
+function manejarLlamadaEntrante(call) {
+  llamadaEntrante = call;
+  const deQuien = call.peer;
+  
+  numeroLlamadaBarra.textContent = contactos[deQuien]?.nombre || deQuien;
+  quienLlama.textContent = contactos[deQuien]?.nombre || deQuien;
+  avatarLlamadaEntrante.textContent = (contactos[deQuien]?.nombre || deQuien).charAt(0).toUpperCase();
+  
+  pantallaLlamadaEntrante.classList.remove('oculto');
+  barraLlamadaActiva.classList.remove('oculto');
+  
+  registrarLlamada(deQuien, 'entrante');
+}
+
+async function responderLlamada() {
+  if (!llamadaEntrante) return;
+  
+  pantallaLlamadaEntrante.classList.add('oculto');
+  
+  try {
+    streamLocal = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    llamadaEntrante.answer(streamLocal);
+    llamadaActiva = llamadaEntrante;
+    
+    numeroLlamadaGrande.textContent = contactos[llamadaActiva.peer]?.nombre || llamadaActiva.peer;
+    avatarLlamada.textContent = (contactos[llamadaActiva.peer]?.nombre || llamadaActiva.peer).charAt(0).toUpperCase();
+    
+    pantallaLlamada.classList.add('activa');
+    estadoLlamada.textContent = 'Conectando...';
+    iniciarTemporizador();
+    
+    llamadaActiva.on('stream', () => {
+      estadoLlamada.textContent = 'En llamada';
+    });
+    
+    llamadaActiva.on('close', finalizarLlamada);
+    llamadaActiva.on('error', finalizarLlamada);
+    
+  } catch (err) {
+    console.error('Error al responder:', err);
+    finalizarLlamada();
+  }
+}
+
+function rechazarLlamada() {
+  if (llamadaEntrante) llamadaEntrante.close();
+  finalizarLlamada();
+}
+
+function finalizarLlamada() {
+  if (llamadaActiva) {
+    try { llamadaActiva.close(); } catch(e) {}
+    llamadaActiva = null;
+  }
+  if (llamadaEntrante) {
+    try { llamadaEntrante.close(); } catch(e) {}
+    llamadaEntrante = null;
+  }
+  
+  if (streamLocal) {
+    streamLocal.getTracks().forEach(track => track.stop());
+    streamLocal = null;
+  }
+  
+  detenerTemporizador();
+  barraLlamadaActiva.classList.add('oculto');
+  pantallaLlamada.classList.remove('activa');
+  pantallaLlamadaEntrante.classList.add('oculto');
+  llamadaMinimizada = false;
+  silenciado = false;
+  camaraActiva = false;
+  actualizarBotonesLlamada();
+  
+  // Avisar al otro que cortamos
+  if (conexionActiva && conexionActiva.open) {
+    conexionActiva.send({ tipo: 'fin-llamada' });
+  }
+}
+
+function minimizarLlamada() {
+  pantallaLlamada.classList.remove('activa');
+  llamadaMinimizada = true;
+}
+
+function maximizarLlamada() {
+  if (llamadaActiva || llamadaEntrante) {
+    pantallaLlamada.classList.add('activa');
+    llamadaMinimizada = false;
+  }
+}
+
+function alternarSilenciar() {
+  if (!streamLocal) return;
+  silenciado = !silenciado;
+  streamLocal.getAudioTracks().forEach(track => track.enabled = !silenciado);
+  actualizarBotonesLlamada();
+}
+
+function alternarAltavoz() {
+  altavozActivo = !altavozActivo;
+  actualizarBotonesLlamada();
+}
+
+function alternarCamara() {
+  if (!streamLocal) return;
+  camaraActiva = !camaraActiva;
+  const videoTrack = streamLocal.getVideoTracks()[0];
+  if (videoTrack) videoTrack.enabled = camaraActiva;
+  actualizarBotonesLlamada();
+}
+
+function actualizarBotonesLlamada() {
+  const iconoSilenciar = document.getElementById('icono-mudo-barra');
+  if (iconoSilenciar) iconoSilenciar.style.fill = silenciado ? '#facc15' : '#fff';
+  
+  const todosSilenciar = [btnSilenciarBarra, btnSilenciarLlamada];
+  todosSilenciar.forEach(btn => {
+    if (btn) btn.style.background = silenciado ? 'rgba(239,68,68,0.5)' : '';
   });
 }
 
-function actualizarListaContactos() {
+function iniciarTemporizador() {
+  segundosLlamada = 0;
+  actualizarTiempoLlamada();
+  temporizadorLlamada = setInterval(() => {
+    segundosLlamada++;
+    actualizarTiempoLlamada();
+  }, 1000);
+}
+
+function detenerTemporizador() {
+  clearInterval(temporizadorLlamada);
+  segundosLlamada = 0;
+  tiempoLlamadaBarra.textContent = '00:00';
+  tiempoLlamadaGrande.textContent = '00:00';
+}
+
+function actualizarTiempoLlamada() {
+  const m = Math.floor(segundosLlamada / 60).toString().padStart(2, '0');
+  const s = (segundosLlamada % 60).toString().padStart(2, '0');
+  tiempoLlamadaBarra.textContent = `${m}:${s}`;
+  tiempoLlamadaGrande.textContent = `${m}:${s}`;
+}
+
+function registrarLlamada(numero, tipo) {
+  historialLlamadas.unshift({
+    numero,
+    nombre: contactos[numero]?.nombre || numero,
+    tipo,
+    fecha: new Date().toLocaleString()
+  });
+  if (historialLlamadas.length > 50) historialLlamadas.pop();
+  localStorage.setItem('codex_llamadas', JSON.stringify(historialLlamadas));
+  renderizarLlamadas();
+}
+
+// ---------- RENDERIZADO ----------
+function renderizarContactos() {
   listaContactos.innerHTML = '';
-  if (Object.keys(contactos).length === 0) {
-    listaContactos.innerHTML = '<p style="text-align:center;color:#888;padding:20px;">Aún no tienes contactos</p>';
+  const numeros = Object.keys(contactos);
+  
+  if (numeros.length === 0) {
+    listaContactos.innerHTML = '<p class="texto-vacio">No tienes contactos aún.</p>';
     return;
   }
-  Object.keys(contactos).forEach(numero => {
+  
+  numeros.forEach(num => {
+    const c = contactos[num];
     const div = document.createElement('div');
     div.className = 'item-contacto';
-    div.innerHTML = `<div class="nombre-contacto">${numero}</div>`;
-    div.addEventListener('click', () => abrirChat(numero));
+    div.innerHTML = `
+      <div class="nombre-contacto">${c.nombre || num}</div>
+      <div class="info-mensaje">${c.conectado ? '🟢 En línea' : '⚪ Desconectado'}</div>
+    `;
+    div.onclick = () => abrirChat(num);
+    agregarEventoPulsar(div, () => {
+      chatPulsado = num;
+      mostrarMenuEliminar();
+    });
     listaContactos.appendChild(div);
   });
 }
 
-// ==========================================
-// ABRIR Y CERRAR CHAT
-// ==========================================
-function abrirChat(numero) {
-  chatActivo = numero;
-  nombreChat.textContent = numero;
-  cajaMensajes.innerHTML = '';
+function renderizarChats() {
+  listaChats.innerHTML = '';
+  const numeros = Object.keys(conversaciones);
   
-  if (contactos[numero] && contactos[numero].mensajes) {
-    contactos[numero].mensajes.forEach(msg => mostrarMensajeEnChat(msg));
-  }
-  
-  pantallaPrincipal.classList.remove('activa');
-  pantallaChat.classList.add('activa');
-  document.body.classList.add('con-chat-abierto');
-  menuOpciones.classList.remove('mostrar');
-}
-
-btnVolver.addEventListener('click', () => {
-  pantallaChat.classList.remove('activa');
-  pantallaPrincipal.classList.add('activa');
-  document.body.classList.remove('con-chat-abierto');
-  chatActivo = null;
-  menuOpciones.classList.remove('mostrar');
-  actualizarListaChats();
-  actualizarListaContactos();
-});
-
-// ==========================================
-// ENVIAR MENSAJE DE TEXTO
-// ==========================================
-async function enviarMensaje() {
-  const texto = inputMensaje.value.trim();
-  if (!texto || !chatActivo) return;
-  
-  const msg = {
-    texto: texto,
-    tipo: 'texto',
-    esMio: true,
-    fecha: new Date().toLocaleString()
-  };
-  
-  mostrarMensajeEnChat(msg);
-  
-  try {
-    await guardarMensaje(chatActivo, texto, true, 'texto');
-    alert('✅ Mensaje guardado');
-  } catch(err) {
-    alert('❌ Error al guardar');
-  }
-  
-  inputMensaje.value = '';
-  actualizarListaChats();
-}
-
-btnEnviar.addEventListener('click', enviarMensaje);
-inputMensaje.addEventListener('keypress', e => {
-  if (e.key === 'Enter') enviarMensaje();
-});
-
-// ==========================================
-// AGREGAR CONTACTO
-// ==========================================
-btnAgregarUsuario.addEventListener('click', () => {
-  const numero = numeroDestinoInput.value.trim();
-  if (!numero) {
-    alert('Escribe un número');
+  if (numeros.length === 0) {
+    sinChats.classList.remove('oculto');
     return;
   }
-  if (!contactos[numero]) {
-    contactos[numero] = { mensajes: [], ultimoMensaje: '¡Hola!' };
-  }
-  actualizarListaChats();
-  actualizarListaContactos();
-  numeroDestinoInput.value = '';
-  alert('✅ Contacto agregado');
-});
-
-// ==========================================
-// CONECTAR NÚMERO
-// ==========================================
-btnConectar.addEventListener('click', async () => {
-  const numero = miNumeroInput.value.trim();
-  if (!numero) {
-    alert('Escribe tu número primero');
-    return;
-  }
-  miNumero = numero;
-  await guardarPerfil('miNumero', numero);
-  estadoConexion.textContent = 'Conectado';
-  estadoConexion.classList.add('estado-conectado');
-  alert(`✅ Conectado como: ${miNumero}`);
-});
-
-// ==========================================
-// MENÚ INFERIOR
-// ==========================================
-itemsMenu.forEach(boton => {
-  boton.addEventListener('click', () => {
-    const pestana = boton.dataset.pestana;
-    itemsMenu.forEach(b => b.classList.remove('activa'));
-    boton.classList.add('activa');
+  sinChats.classList.add('oculto');
+  
+  numeros.forEach(num => {
+    const mensajes = conversaciones[num];
+    const ultimo = mensajes[mensajes.length - 1];
+    const sinLeer = mensajes.filter(m => !m.propio && (!conversaciones[num].ultimaLeida || Date.parse(m.hora) > conversaciones[num].ultimaLeida)).length;
     
-    vistas.forEach(vista => {
-      vista.classList.toggle('activa', vista.id === `vista-${pestana}`);
+    const div = document.createElement('div');
+    div.className = 'item-chat';
+    div.innerHTML = `
+      <div class="nombre-contacto">${contactos[num]?.nombre || num}</div>
+      <div class="info-mensaje">${ultimo.texto.substring(0, 25)}${ultimo.texto.length > 25 ? '...' : ''} · ${ultimo.hora}</div>
+      ${sinLeer > 0 ? '<div class="punto-sin-leer"></div>' : ''}
+    `;
+    div.onclick = () => abrirChat(num);
+    agregarEventoPulsar(div, () => {
+      chatPulsado = num;
+      mostrarMenuEliminar();
     });
+    listaChats.appendChild(div);
   });
-});
-
-// ==========================================
-// OPCIONES DE ENVÍO (IMAGEN / VIDEO)
-// ==========================================
-btnOpciones.addEventListener('click', () => {
-  menuOpciones.classList.toggle('mostrar');
-});
-
-opcionesEnvio.forEach(boton => {
-  boton.addEventListener('click', () => {
-    const tipo = boton.dataset.tipo;
-    menuOpciones.classList.remove('mostrar');
-    if (tipo === 'imagen') inputImagen.click();
-    else if (tipo === 'video') inputVideo.click();
-  });
-});
-
-inputImagen.addEventListener('change', async e => {
-  const archivo = e.target.files[0];
-  if (!archivo || !chatActivo) return;
   
-  const lector = new FileReader();
-  lector.onload = async function(evento) {
-    const datos = evento.target.result;
-    const msg = {
-      tipo: 'imagen',
-      datosArchivo: datos,
-      esMio: true,
-      fecha: new Date().toLocaleString()
-    };
-    mostrarMensajeEnChat(msg);
-    await guardarMensaje(chatActivo, '[Imagen]', true, 'imagen', datos);
-    actualizarListaChats();
-  };
-  lector.readAsDataURL(archivo);
-  inputImagen.value = '';
-});
-
-inputVideo.addEventListener('change', async e => {
-  const archivo = e.target.files[0];
-  if (!archivo || !chatActivo) return;
-  
-  const lector = new FileReader();
-  lector.onload = async function(evento) {
-    const datos = evento.target.result;
-    const msg = {
-      tipo: 'video',
-      datosArchivo: datos,
-      esMio: true,
-      fecha: new Date().toLocaleString()
-    };
-    mostrarMensajeEnChat(msg);
-    await guardarMensaje(chatActivo, '[Video]', true, 'video', datos);
-    actualizarListaChats();
-  };
-  lector.readAsDataURL(archivo);
-  inputVideo.value = '';
-});
-
-// ==========================================
-// VISOR DE IMÁGENES/VIDEO
-// ==========================================
-window.abrirVisor = function(datos, tipo) {
-  visorCompleto.classList.remove('oculto');
-  contenidoVisor.innerHTML = tipo === 'imagen' 
-    ? `<img src="${datos}" style="max-width:100%;max-height:85vh;">`
-    : `<video controls style="max-width:100%;max-height:85vh;"><source src="${datos}"></video>`;
-};
-
-btnCerrarVisor.addEventListener('click', () => {
-  visorCompleto.classList.add('oculto');
-  contenidoVisor.innerHTML = '';
-});
-
-// ==========================================
-// INICIO DE LA APLICACIÓN
-// ==========================================
-async function iniciar() {
-  alert('🚀 Iniciando Codex...');
-  
-  try {
-    await abrirBaseDatos();
-    
-    const numeroGuardado = await leerPerfil('miNumero');
-    if (numeroGuardado) {
-      miNumero = numeroGuardado;
-      miNumeroInput.value = numeroGuardado;
-      estadoConexion.textContent = 'Conectado';
-      estadoConexion.classList.add('estado-conectado');
-    }
-    
-    await cargarTodosLosMensajes();
-    actualizarListaChats();
-    actualizarListaContactos();
-    
-    alert('✅ ¡Todo listo! Tus mensajes se guardarán en tu teléfono');
-    
-  } catch(err) {
-    alert('❌ Error al iniciar: ' + err);
-  }
+  actualizarContadorSinLeer();
 }
 
-// ¡EMPEZAR!
-iniciar();
+function renderizarLlamadas() {
+  listaLlamadas.innerHTML = '';
+  
+  if (historialLlamadas.length === 0) {
+    sinLlamadas.classList.remove('oculto');
+    return;
+  }
+  sinLlamadas.classList.add('oculto');
+  
+  historialLlamadas.forEach(llamada => {
+    const div = document.createElement('div');
+    div.className = `item-llamada ${llamada.tipo === 'entrante' ? 'llamada-entrante' : 'llamada-saliente'}`;
+    div.innerHTML = `
+      <div class="nombre-contacto">${llamada.nombre}</div>
+      <div class="info-mensaje">${llamada.tipo === 'entrante' ? '📥 Recibida' : '📤 Realizada'} · ${llamada.fecha}</div>
+    `;
+    listaLlamadas.appendChild(div);
+  });
+}
+
+function actualizarContadorSinLeer() {
+  let total = 0;
+  Object.values(conversaciones).forEach(mensajes => {
+    total += mensajes.filter(m => !m.propio && (!mensajes.ultimaLeida || Date.parse(m.hora) > mensajes.ultimaLeida)).length;
+  });
+  
+  contadorGlobalSinLeer.style.display = total > 0 ? 'flex' : 'none';
+  contadorGlobalSinLeer.textContent = total > 9 ? '9+' : total;
+}
+
+// ---------- ELIMINAR CHAT AL MANTENER PULSADO ----------
+function agregarEventoPulsar(elemento, callback) {
+  elemento.addEventListener('touchstart', () => {
+    temporizadorPulsar = setTimeout(callback, 600);
+  });
+  elemento.addEventListener('touchend', () => clearTimeout(temporizadorPulsar));
+  elemento.addEventListener('touchmove', () => clearTimeout(temporizadorPulsar));
+  elemento.addEventListener('mousedown', () => {
+    temporizadorPulsar = setTimeout(callback, 600);
+  });
+  elemento.addEventListener('mouseup', () => clearTimeout(temporizadorPulsar));
+  elemento.addEventListener('mouseleave', () => clearTimeout(temporizadorPulsar));
+}
+
+function mostrarMenuEliminar() {
+  menuEliminarChat.classList.remove('oculto');
+  setTimeout(() => {
+    document.addEventListener('click', cerrarMenuEliminar, { once: true });
+  }, 10);
+}
+
+function cerrarMenuEliminar() {
+  menuEliminarChat.classList.add('oculto');
+  chatPulsado = null;
+}
+
+// ---------- PERFIL DE USUARIO ----------
+function abrirPerfil(numero) {
+  numeroPerfil.textContent = numero;
+  inicialPerfil.textContent = (contactos[numero]?.nombre || numero).charAt(0).toUpperCase();
+  nombrePerfil.value = contactos[numero]?.nombrePersonal || contactos[numero]?.nombre || numero;
+  
+  if (contactos[numero]?.conectado) {
+    puntoEstado.classList.add('conectado');
+    textoEstado.textContent = 'En línea';
+  } else {
+    puntoEstado.classList.remove('conectado');
+    textoEstado.textContent = contactos[numero]?.ultimaVisto || 'Desconectado';
+  }
+  
+  perfilUsuarioModal.classList.remove('oculto');
+}
+
+function guardarNombreContacto() {
+  if (!chatPulsado && contactoActual) {
+    contactos[contactoActual].nombrePersonal = nombrePerfil.value || contactoActual;
+    guardarContactos();
+    renderizarContactos();
+    renderizarChats();
+    textoNombreChat.textContent = nombrePerfil.value || contactoActual;
+  }
+  perfilUsuarioModal.classList.add('oculto');
+}
+
+// ---------- VISOR DE IMAGEN/VIDEO ----------
+function abrirVisor(src, tipo) {
+  const visor = document.getElementById('visorCompleto');
+  const contenidoVisor = document.getElementById('contenidoVisor');
+  contenidoVisor.innerHTML = tipo === 'imagen' 
+    ? `<img src="${src}">` 
+    : `<video src="${src}" controls autoplay></video>`;
+  visor.classList.remove('oculto');
+}
+
+// ---------- GUARDADO LOCAL ----------
+function guardarConversaciones() {
+  localStorage.setItem('codex_chats', JSON.stringify(conversaciones));
+}
+
+function guardarContactos() {
+  localStorage.setItem('codex_contactos', JSON.stringify(contactos));
+}
+
+// ---------- EVENTOS ----------
+function configurarEventos() {
+  // Conectar
+  btnConectar.onclick = () => {
+    miNumero = miNumeroInput.value.trim();
+    if (miNumero) conectarPeer();
+  };
+  
+  // Menú pestañas
+  itemsMenu.forEach(boton => {
+    boton.onclick = () => {
+      itemsMenu.forEach(b => b.classList.remove('activa'));
+      boton.classList.add('activa');
+      const pestana = boton.dataset.pestana;
+      vistas.forEach(v => v.classList.remove('activa'));
+      document.getElementById(`vista-${pestana}`).classList.add('activa');
+    };
+  });
+  
+  // Agregar usuario
+  btnAgregarUsuario.onclick = () => {
+    const num = numeroDestinoInput.value.trim();
+    if (!num) return;
+    if (!contactos[num]) contactos[num] = { nombre: num };
+    guardarContactos();
+    renderizarContactos();
+    numeroDestinoInput.value = '';
+    abrirChat(num);
+  };
+  
+  // Chat
+  btnVolver.onclick = cerrarChat;
+  btnVerPerfil.onclick = () => contactoActual && abrirPerfil(contactoActual);
+  btnEnviar.onclick = () => {
+    if (inputMensaje.value.trim()) {
+      enviarMensaje(inputMensaje.value.trim());
+    }
+  };
+  inputMensaje.onkeydown = (e) => {
+    if (e.key === 'Enter' && inputMensaje.value.trim()) {
+      enviarMensaje(inputMensaje.value.trim());
+    }
+  };
+  
+  // Opciones adjuntar
+  btnOpciones.onclick = () => menuOpciones.classList.toggle('mostrar');
+  document.querySelectorAll('.opcion-envio').forEach(opcion => {
+    opcion.onclick = () => {
+      const tipo = opcion.dataset.tipo;
+      if (tipo === 'imagen') inputImagen.click();
+      else if (tipo === 'video') inputVideo.click();
+      else if (tipo === 'audio') alert('Grabación de audio próximamente');
+      menuOpciones.classList.remove('mostrar');
+    };
+  });
+  
+  inputImagen.onchange = (e) => {
+    const archivo = e.target.files[0];
+    if (!archivo) return;
+    const lector = new FileReader();
+    lector.onload = (evento) => {
+      enviarMensaje(evento.target.result, 'imagen');
+    };
+    lector.readAsDataURL(archivo);
+    inputImagen.value = '';
+  };
+  
+  inputVideo.onchange = (e) => {
+    const archivo = e.target.files[0];
+    if (!archivo) return;
+    const lector = new FileReader();
+    lector.onload = (evento) => {
+      enviarMensaje(evento.target.result, 'video');
+    };
+    lector.readAsDataURL(archivo);
+    inputVideo.value = '';
+  };
+  
+  // Llamadas
+  btnLlamar.onclick = () => {
+    if (contactoActual) iniciarLlamada(contactoActual);
+  };
+  btnColgarBarra.onclick = finalizarLlamada;
+  btnColgarPantalla.onclick = finalizarLlamada;
+  btnRechazar.onclick = rechazarLlamada;
+  btnResponder.onclick = responderLlamada;
+  btnMinimizarLlamada.onclick = minimizarLlamada;
+  btnMinimizarPantallaLlamada.onclick = minimizarLlamada;
+  barraLlamadaActiva.onclick = () => {
+    if (llamadaActiva || llamadaEntrante) maximizarLlamada();
+  };
+  btnSilenciarBarra.onclick = alternarSilenciar;
+  btnSilenciarLlamada.onclick = alternarSilenciar;
+  btnAltavozLlamada.onclick = alternarAltavoz;
+  btnCamaraLlamada.onclick = alternarCamara;
+  btnChatDesdeLlamada.onclick = () => {
+    minimizarLlamada();
+    if (contactoActual) abrirChat(contactoActual);
+  };
+  
+  // Eliminar chat
+  opcionEliminarChat.onclick = () => {
+    if (chatPulsado) eliminarConversacion(chatPulsado);
+  };
+  
+  // Perfil
+  btnCerrarPerfil.onclick = () => perfilUsuarioModal.classList.add('oculto');
+  btnGuardarPerfil.onclick = guardarNombreContacto;
+  perfilUsuarioModal.onclick = (e) => {
+    if (e.target === perfilUsuarioModal) perfilUsuarioModal.classList.add('oculto');
+  };
+  
+  // Visor
+  document.getElementById('btnCerrarVisor').onclick = () => {
+    document.getElementById('visorCompleto').classList.add('oculto');
+  };
+  document.getElementById('visorCompleto').onclick = (e) => {
+    if (e.target.id === 'visorCompleto') {
+      document.getElementById('visorCompleto').classList.add('oculto');
+    }
+  };
+  
+  // Cerrar menú opciones al tocar fuera
+  document.addEventListener('click', (e) => {
+    if (!btnOpciones.contains(e.target) && !menuOpciones.contains(e.target)) {
+      menuOpciones.classList.remove('mostrar');
+    }
+  });
+}
+
+// Iniciar todo 🚀
+init();
