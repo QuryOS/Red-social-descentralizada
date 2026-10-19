@@ -54,6 +54,7 @@ let grabandoAudio = false;
 let grabadoraActiva = null;
 let flujoGrabacion = null;
 let mensajesSinLeer = {};
+let reconectandoActivo = false; // ← NUEVO: Evitamos reconexiones duplicadas
 
 // BASE DE DATOS LOCAL
 function iniciarDB() {
@@ -157,6 +158,67 @@ function actualizarContadorGlobal() {
   contadorGlobalSinLeer.textContent = total > 99 ? '99+' : total;
 }
 
+// ✅ FUNCIÓN DE RECONEXIÓN MEJORADA
+async function reconectar() {
+  if (!miId || reconectandoActivo) return;
+  
+  console.log('🔄 Iniciando reconexión con:', miId);
+  reconectandoActivo = true;
+  
+  if (peer) {
+    peer.off('open');
+    peer.off('connection');
+    peer.off('call');
+    peer.off('error');
+    peer.destroy();
+    peer = null;
+  }
+
+  estadoConexion.textContent = 'Reconectando...';
+  estadoConexion.className = 'estado-texto estado-reintentando';
+  btnConectar.textContent = 'Conectando...';
+  btnConectar.disabled = true;
+
+  peer = new Peer(miId);
+
+  peer.on('open', () => {
+    console.log('✅ Reconectado como:', miId);
+    estadoConexion.textContent = '● En línea';
+    estadoConexion.className = 'estado-texto estado-conectado';
+    btnConectar.textContent = 'Conectado';
+    btnConectar.disabled = true;
+    miNumeroInput.readOnly = true;
+    reconectandoActivo = false;
+  });
+
+  peer.on('connection', manejarConexionEntrante);
+  peer.on('call', manejarLlamadaEntrante);
+
+  peer.on('close', () => {
+    console.log('⚠️ Conexión cerrada');
+    if (reconectandoActivo) return;
+    setTimeout(reconectar, 2000);
+  });
+
+  peer.on('error', err => {
+    console.error('❌ Error PeerJS:', err.type);
+    reconectandoActivo = false;
+    
+    if (err.type === 'unavailable-id') {
+      estadoConexion.textContent = 'Número activo en otro dispositivo';
+      estadoConexion.className = 'estado-texto estado-desconectado';
+      btnConectar.disabled = false;
+      btnConectar.textContent = 'Conectar';
+    } else if (err.type === 'peer-unavailable') {
+      // Normal, el otro usuario no está conectado
+    } else {
+      estadoConexion.textContent = 'Desconectado — Reconectando...';
+      estadoConexion.className = 'estado-texto estado-reintentando';
+      setTimeout(reconectar, 3000);
+    }
+  });
+}
+
 // INICIO
 async function iniciar() {
   await iniciarDB();
@@ -164,7 +226,8 @@ async function iniciar() {
   const numeroGuardado = await leerValor('miNumero');
   if (numeroGuardado) {
     miNumeroInput.value = numeroGuardado;
-    setTimeout(() => conectar(numeroGuardado), 500);
+    miId = numeroGuardado;
+    setTimeout(reconectar, 800); // Usamos la función mejorada
   }
 
   contactos = await leerChats();
@@ -178,50 +241,22 @@ async function iniciar() {
   renderizarListaChats();
   renderizarListaContactos();
   renderizarListaLlamadas();
-}
 
-// CONEXIÓN
-async function conectar(numero) {
-  if (!numero) return;
-
-  if (reconectarTiempo) clearTimeout(reconectarTiempo);
-  if (peer) peer.destroy();
-
-  miId = numero;
-  await guardarValor('miNumero', numero);
-
-  btnConectar.disabled = true;
-  btnConectar.textContent = 'Conectando...';
-  estadoConexion.textContent = 'Conectando...';
-  estadoConexion.className = 'estado-texto estado-reintentando';
-
-  peer = new Peer(miId);
-
-  peer.on('open', id => {
-    miId = id;
-    btnConectar.textContent = 'Conectado';
-    estadoConexion.textContent = '● En línea';
-    estadoConexion.className = 'estado-texto estado-conectado';
-    miNumeroInput.readOnly = true;
-  });
-
-  peer.on('connection', manejarConexionEntrante);
-  peer.on('call', manejarLlamadaEntrante);
-
-  peer.on('error', err => {
-    console.error('Error de conexión:', err);
-    miNumeroInput.readOnly = false;
-    btnConectar.disabled = false;
-    btnConectar.textContent = 'Reintentar';
-    
-    if (err.type === 'unavailable-id') {
-      estadoConexion.textContent = 'Número activo en otro dispositivo';
-      estadoConexion.className = 'estado-texto estado-desconectado';
-    } else {
-      estadoConexion.textContent = 'Desconectado — escribe tu número y pulsa Conectar';
-      estadoConexion.className = 'estado-texto estado-desconectado';
+  // ✅ Detectar cuando la página vuelve a estar visible
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && miId && (!peer || !peer.open)) {
+      console.log('👀 Página visible, verificando conexión...');
+      setTimeout(reconectar, 300);
     }
   });
+}
+
+// CONEXIÓN INICIAL
+async function conectar(numero) {
+  if (!numero) return;
+  miId = numero;
+  await guardarValor('miNumero', numero);
+  reconectar();
 }
 
 btnConectar.addEventListener('click', () => {
@@ -636,40 +671,6 @@ function finalizarLlamada(numero, tipo, estado) {
 btnColgar.addEventListener('click', () => {
   if (llamadaActiva) llamadaActiva.close();
 });
-
-// 🔄 RECONEXIÓN AUTOMÁTICA
-async function reconectarSiEsNecesario() {
-  if (!miId) return;
-  
-  if (!peer || !peer.open) {
-    console.log('🔄 Reconectando automáticamente...');
-    estadoConexion.textContent = 'Reconectando...';
-    estadoConexion.className = 'estado-texto estado-reintentando';
-    
-    peer = new Peer(miId);
-    
-    peer.on('open', () => {
-      estadoConexion.textContent = '● En línea';
-      estadoConexion.className = 'estado-texto estado-conectado';
-      btnConectar.textContent = 'Conectado';
-      btnConectar.disabled = true;
-      miNumeroInput.readOnly = true;
-    });
-    
-    peer.on('connection', manejarConexionEntrante);
-    peer.on('call', manejarLlamadaEntrante);
-    
-    peer.on('error', () => {
-      estadoConexion.textContent = 'Desconectado — toca reconectar';
-      estadoConexion.className = 'estado-texto estado-desconectado';
-      btnConectar.disabled = false;
-      btnConectar.textContent = 'Conectar';
-    });
-  }
-}
-
-// Revisamos cada 5 segundos si seguimos conectados
-setInterval(reconectarSiEsNecesario, 5000);
 
 // INICIAR TODO
 iniciar();
