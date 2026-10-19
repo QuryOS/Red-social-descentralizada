@@ -15,6 +15,34 @@
     </button>
   </header>
 
+  <!-- BARRA FLOTANTE DE LLAMADA EN CURSO -->
+  <div id="barraLlamadaActiva" class="barra-llamada-activa oculto">
+    <div class="info-llamada-barra">
+      <span class="numero-llamada-barra" id="numeroLlamadaBarra">Desconocido</span>
+      <span class="tiempo-llamada" id="tiempoLlamadaBarra">00:00</span>
+    </div>
+    <div class="acciones-barra">
+      <button class="icono-btn pequeño" id="btnMinimizarLlamada" title="Minimizar">
+        <svg viewBox="0 0 24 24"><path d="M19 13H5v-2h14v2z"/></svg>
+      </button>
+      <button class="icono-btn pequeño" id="btnSilenciarBarra" title="Silenciar micrófono">
+        <svg id="icono-mudo-barra" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 2.76 2.24 5 5 5s5-2.24 5-5h2c0 4.08-3.06 7.44-7 7.93V19h4v2h-4v3h2v-3c4.28-.26 7.5-3.89 7.5-8.33h-2c0 3.41-2.58 6.26-6 6.6V15.93z"/></svg>
+      </button>
+      <button class="icono-btn pequeño" id="btnAltavozBarra" title="Altavoz">
+        <svg id="icono-altavoz-barra" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+      </button>
+      <button class="icono-btn pequeño" id="btnCamaraBarra" title="Cámara">
+        <svg id="icono-camara-barra" viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+      </button>
+      <button class="icono-btn pequeño" id="btnChatDesdeLlamada" title="Ir al chat">
+        <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+      </button>
+      <button class="icono-btn pequeño btn-colgar-barra" id="btnColgarBarra" title="Colgar llamada">
+        <svg viewBox="0 0 24 24"><path d="M12 9a3 3 0 0 0-3 3v1a3 3 0 0 0 3 3 3 3 0 0 0 3-3v-1a3 3 0 0 0-3-3zm6 6c0 1.1-.9 2-2 2H8c-1.1 0-2-.9-2-2V9c0-1.1.9-2 2-2h8c1.1 0 2 .9 2 2v6z"/></svg>
+      </button>
+    </div>
+  </div>
+
   <!-- PANTALLA PRINCIPAL -->
   <main id="pantallaPrincipal" class="pantalla activa">
     <!-- ESTADO CONEXIÓN -->
@@ -75,13 +103,60 @@
     </nav>
   </main>
 
+  <!-- VENTANA EMERGENTE PERFIL DE USUARIO -->
+  <div id="perfilUsuarioModal" class="modal-perfil oculto">
+    <div class="contenido-modal-perfil">
+      <button class="cerrar-modal-perfil" id="btnCerrarPerfil">
+        <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+      
+      <div class="foto-perfil-grande" id="fotoPerfilGrande">
+        <span id="inicialPerfil">?</span>
+      </div>
+      
+      <div class="estado-en-linea" id="estadoEnLinea">
+        <span class="punto-estado"></span>
+        <span id="textoEstado">Desconocido</span>
+      </div>
+      
+      <div class="campo-perfil">
+        <label>Nombre:</label>
+        <input type="text" id="nombrePerfil" placeholder="Sin nombre">
+        <button class="icono-btn pequeño" id="btnEditarNombre" title="Editar nombre">
+          <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+        </button>
+      </div>
+      
+      <div class="campo-perfil">
+        <label>Número:</label>
+        <div class="texto-perfil" id="numeroPerfil">+00 000 000 000</div>
+      </div>
+      
+      <button class="btn-primario" id="btnGuardarPerfil">Guardar cambios</button>
+    </div>
+  </div>
+
+  <!-- MENÚ ELIMINAR CHAT -->
+  <div id="menuEliminarChat" class="menu-eliminar oculto">
+    <div class="opcion-eliminar" id="opcionEliminarChat">
+      <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+      <span>Eliminar conversación</span>
+    </div>
+  </div>
+
   <!-- VISTA DE CHAT INDIVIDUAL -->
   <aside id="pantallaChat" class="pantalla">
     <header class="cabecera-chat">
       <button class="icono-btn" id="btnVolver">
         <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
       </button>
-      <div class="nombre-contacto" id="nombreChat"></div>
+      <div class="nombre-contacto" id="nombreChat">
+        <span id="textoNombreChat"></span>
+        <span class="subtitulo-chat" id="subtituloChat"></span>
+      </div>
+      <button class="icono-btn" id="btnVerPerfil">
+        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+      </button>
       <button class="icono-btn" id="btnLlamar">
         <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
       </button>
@@ -117,27 +192,51 @@
     </div>
   </aside>
 
-  <!-- LLAMADA EN CURSO -->
-  <div id="pantallaLlamada" class="pantalla">
-    <div class="contenedor-llamada">
-      <p id="estadoLlamada">Llamando...</p>
-      <audio id="audioRemoto" autoplay playsinline>
-      <button id="btnColgar" class="btn-colgar">
+  <!-- PANTALLA DE LLAMADA EN CURSO -->
+  <div id="pantallaLlamada" class="pantalla oculto">
+    <div class="contenedor-llamada-pantalla">
+      <p class="etiqueta-estado-llamada" id="estadoLlamada">Conectando...</p>
+      <div class="info-llamada-central">
+        <div class="avatar-llamada" id="avatarLlamada">?</div>
+        <p class="numero-llamada-grande" id="numeroLlamadaGrande">Desconocido</p>
+        <p class="tiempo-llamada-grande" id="tiempoLlamadaGrande">00:00</p>
+      </div>
+      
+      <div class="controles-llamada">
+        <button class="btn-control-llamada" id="btnSilenciarLlamada" title="Silenciar micrófono">
+          <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 2.76 2.24 5 5 5s5-2.24 5-5h2c0 4.08-3.06 7.44-7 7.93V19h4v2h-4v3h2v-3c4.28-.26 7.5-3.89 7.5-8.33h-2c0 3.41-2.58 6.26-6 6.6V15.93z"/></svg>
+        </button>
+        <button class="btn-control-llamada" id="btnAltavozLlamada" title="Activar altavoz">
+          <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+        </button>
+        <button class="btn-control-llamada" id="btnCamaraLlamada" title="Activar cámara">
+          <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+        </button>
+        <button class="btn-control-llamada" id="btnMinimizarPantallaLlamada" title="Minimizar">
+          <svg viewBox="0 0 24 24"><path d="M19 13H5v-2h14v2z"/></svg>
+        </button>
+      </div>
+      
+      <button id="btnColgarPantalla" class="btn-colgar-grande" title="Finalizar llamada">
         <svg viewBox="0 0 24 24"><path d="M12 9a3 3 0 0 0-3 3v1a3 3 0 0 0 3 3 3 3 0 0 0 3-3v-1a3 3 0 0 0-3-3zm6 6c0 1.1-.9 2-2 2H8c-1.1 0-2-.9-2-2V9c0-1.1.9-2 2-2h8c1.1 0 2 .9 2 2v6z"/></svg>
       </button>
     </div>
   </div>
 
   <!-- LLAMADA ENTRANTE -->
-  <div id="pantallaLlamadaEntrante" class="pantalla">
-    <div class="contenedor-llamada">
-      <p id="quienLlama">Te llama:</p>
+  <div id="pantallaLlamadaEntrante" class="pantalla oculto">
+    <div class="contenedor-llamada-pantalla">
+      <p class="etiqueta-estado-llamada">Llamada entrante</p>
+      <div class="info-llamada-central">
+        <div class="avatar-llamada" id="avatarLlamadaEntrante">?</div>
+        <p class="numero-llamada-grande" id="quienLlama">Desconocido</p>
+      </div>
       <div class="botones-llamada">
-        <button id="btnResponder" class="btn-responder">
-          <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
-        </button>
-        <button id="btnRechazar" class="btn-colgar">
+        <button id="btnRechazar" class="btn-colgar" title="Rechazar llamada">
           <svg viewBox="0 0 24 24"><path d="M12 9a3 3 0 0 0-3 3v1a3 3 0 0 0 3 3 3 3 0 0 0 3-3v-1a3 3 0 0 0-3-3zm6 6c0 1.1-.9 2-2 2H8c-1.1 0-2-.9-2-2V9c0-1.1.9-2 2-2h8c1.1 0 2 .9 2 2v6z"/></svg>
+        </button>
+        <button id="btnResponder" class="btn-responder" title="Responder llamada">
+          <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
         </button>
       </div>
     </div>
