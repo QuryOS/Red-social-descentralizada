@@ -34,7 +34,6 @@ const quienLlama = document.getElementById('quienLlama');
 const btnColgar = document.getElementById('btnColgar');
 const btnResponder = document.getElementById('btnResponder');
 const btnRechazar = document.getElementById('btnRechazar');
-const audioRemoto = document.getElementById('audioRemoto');
 
 const visorCompleto = document.getElementById('visorCompleto');
 const contenidoVisor = document.getElementById('contenidoVisor');
@@ -85,28 +84,41 @@ function actualizarEstadoAmigo(numeroAmigo) {
   return 'desconectado';
 }
 
-// 📂 BASE DE DATOS LOCAL — CORREGIDA
+// 💾 GUARDADO DOBLE: IndexedDB + localStorage como respaldo
+function guardarChatsEnLocal() {
+  try {
+    localStorage.setItem('codex_chats', JSON.stringify(contactos));
+    console.log('📋 Respaldo guardado en localStorage');
+  } catch (e) {
+    console.warn('⚠️ No se pudo guardar en localStorage:', e);
+  }
+}
+
+function cargarChatsDeLocal() {
+  try {
+    const datos = localStorage.getItem('codex_chats');
+    if (datos) {
+      console.log('📋 Cargando respaldo desde localStorage');
+      return JSON.parse(datos);
+    }
+  } catch (e) {
+    console.warn('⚠️ No se pudo leer de localStorage:', e);
+  }
+  return {};
+}
+
+// 📂 BASE DE DATOS LOCAL
 function iniciarDB() {
   return new Promise((res, rej) => {
-    const solicitud = indexedDB.open('CodexDB', 2); // ← Cambiamos versión para recrear almacén
+    const solicitud = indexedDB.open('CodexDB', 3);
     solicitud.onupgradeneeded = e => {
       baseDatos = e.target.result;
-      
-      // Almacén para perfil
       if (!baseDatos.objectStoreNames.contains('perfil')) {
         baseDatos.createObjectStore('perfil');
       }
-      
-      // Almacén para chats — estructura clara
       if (!baseDatos.objectStoreNames.contains('chats')) {
         const store = baseDatos.createObjectStore('chats', { keyPath: 'id' });
         store.createIndex('conQuien', 'conQuien', { unique: false });
-        store.createIndex('fecha', 'fecha', { unique: false });
-      }
-      
-      // Almacén para llamadas
-      if (!baseDatos.objectStoreNames.contains('llamadas')) {
-        baseDatos.createObjectStore('llamadas', { autoIncrement: true });
       }
     };
     solicitud.onsuccess = e => { baseDatos = e.target.result; res(); };
@@ -115,6 +127,7 @@ function iniciarDB() {
 }
 
 async function guardarValor(clave, valor) {
+  localStorage.setItem('codex_' + clave, JSON.stringify(valor));
   return new Promise(res => {
     const tx = baseDatos.transaction('perfil', 'readwrite');
     tx.objectStore('perfil').put(valor, clave);
@@ -123,6 +136,8 @@ async function guardarValor(clave, valor) {
 }
 
 async function leerValor(clave) {
+  const local = localStorage.getItem('codex_' + clave);
+  if (local) return JSON.parse(local);
   return new Promise(res => {
     const tx = baseDatos.transaction('perfil');
     const solicitud = tx.objectStore('perfil').get(clave);
@@ -130,78 +145,100 @@ async function leerValor(clave) {
   });
 }
 
-// ✅ FUNCIÓN DE GUARDADO CORREGIDA
+// ✅ GUARDAR MENSAJE — corregido y con respaldo doble
 async function guardarMensaje(conQuien, mensaje) {
-  return new Promise((res, rej) => {
+  console.log('💾 Guardando mensaje para', conQuien, '→', mensaje);
+  
+  // Asegurar que el mensaje tenga todos los campos
+  const mensajeLimpio = {
+    id: `${conQuien}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    conQuien: conQuien,
+    de: mensaje.de || '',
+    para: mensaje.para || '',
+    tipo: mensaje.tipo || 'mensaje',
+    texto: mensaje.texto || '',
+    datos: mensaje.datos || '',
+    propio: !!mensaje.propio,
+    fecha: mensaje.fecha || Date.now()
+  };
+
+  // Actualizar en memoria primero
+  if (!contactos[conQuien]) {
+    contactos[conQuien] = {
+      mensajes: [],
+      ultimoMensaje: '',
+      ultimoTiempo: 0,
+      leido: true
+    };
+  }
+  contactos[conQuien].mensajes.push(mensajeLimpio);
+  
+  const preview = 
+    mensajeLimpio.tipo === 'imagen' ? '[Imagen]' :
+    mensajeLimpio.tipo === 'video' ? '[Video]' :
+    mensajeLimpio.tipo === 'audio' ? '[Nota de voz]' :
+    mensajeLimpio.texto || '[Mensaje vacío]';
+  
+  contactos[conQuien].ultimoMensaje = preview;
+  contactos[conQuien].ultimoTiempo = mensajeLimpio.fecha;
+  
+  // Guardar respaldo en localStorage
+  guardarChatsEnLocal();
+  
+  // También guardar en IndexedDB
+  return new Promise((res) => {
+    if (!baseDatos) { res(); return; }
     const tx = baseDatos.transaction('chats', 'readwrite');
-    const store = tx.objectStore('chats');
-    
-    const registro = {
-      id: `${conQuien}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      conQuien: conQuien,
-      de: mensaje.de,
-      para: mensaje.para,
-      tipo: mensaje.tipo,
-      texto: mensaje.texto || '',
-      datos: mensaje.datos || '',
-      propio: mensaje.propio,
-      fecha: mensaje.fecha
-    };
-    
-    console.log('💾 Guardando mensaje:', registro);
-    store.put(registro);
-    tx.oncomplete = () => {
-      console.log('✅ Mensaje guardado correctamente');
-      res();
-    };
-    tx.onerror = e => {
-      console.error('❌ Error guardando:', e.target.error);
-      rej(e.target.error);
-    };
+    tx.objectStore('chats').put(mensajeLimpio);
+    tx.oncomplete = () => { console.log('✅ Mensaje guardado en DB'); res(); };
+    tx.onerror = () => res();
   });
 }
 
-// ✅ FUNCIÓN DE LECTURA MEJORADA
-async function leerTodosLosChats() {
-  return new Promise((res, rej) => {
+// ✅ CARGAR CHATS AL INICIO
+async function cargarChatsGuardados() {
+  console.log('📂 Cargando chats guardados...');
+  
+  // Primero intentar con localStorage (más confiable en móvil)
+  const respaldoLocal = cargarChatsDeLocal();
+  if (Object.keys(respaldoLocal).length > 0) {
+    console.log('✅ Usando respaldo de localStorage');
+    return respaldoLocal;
+  }
+  
+  // Si no hay respaldo, intentar IndexedDB
+  if (!baseDatos) return {};
+  
+  return new Promise((res) => {
     const tx = baseDatos.transaction('chats');
-    const store = tx.objectStore('chats');
-    const todos = store.getAll();
-    
+    const todos = tx.objectStore('chats').getAll();
     todos.onsuccess = () => {
-      const mensajes = todos.result;
-      console.log(`📂 Leídos ${mensajes.length} mensajes de la base de datos`);
-      
       const mapa = {};
-      
-      mensajes.forEach(msg => {
-        const clave = msg.conQuien;
-        if (!mapa[clave]) {
-          mapa[clave] = {
+      todos.result.forEach(msg => {
+        if (!msg.conQuien) return;
+        if (!mapa[msg.conQuien]) {
+          mapa[msg.conQuien] = {
             mensajes: [],
-            ultimoMensaje: null,
+            ultimoMensaje: '',
             ultimoTiempo: 0,
             leido: true
           };
         }
-        mapa[clave].mensajes.push(msg);
-        
-        const textoPreview = 
+        mapa[msg.conQuien].mensajes.push(msg);
+        const preview = 
           msg.tipo === 'imagen' ? '[Imagen]' :
           msg.tipo === 'video' ? '[Video]' :
           msg.tipo === 'audio' ? '[Nota de voz]' :
           msg.texto || '[Mensaje vacío]';
-          
-        mapa[clave].ultimoMensaje = textoPreview;
-        mapa[clave].ultimoTiempo = msg.fecha;
+        mapa[msg.conQuien].ultimoMensaje = preview;
+        mapa[msg.conQuien].ultimoTiempo = msg.fecha;
       });
-      
+      console.log(`✅ Cargados ${todos.result.length} mensajes de IndexedDB`);
       res(mapa);
     };
-    
-    todos.onerror = e => {
-      console.error('❌ Error leyendo chats:', e.target.error);
-      rej(e.target.error);
+    todos.onerror = () => {
+      console.log('⚠️ Error leyendo DB, empezando vacío');
+      res({});
     };
   });
 }
@@ -210,22 +247,20 @@ async function marcarComoLeido(numero) {
   if (contactos[numero]) contactos[numero].leido = true;
   delete mensajesSinLeer[numero];
   actualizarContadorGlobal();
+  guardarChatsEnLocal();
 }
 
 async function guardarLlamada(datos) {
   return new Promise(res => {
-    const tx = baseDatos.transaction('llamadas', 'readwrite');
-    tx.objectStore('llamadas').add({ ...datos, fecha: Date.now() });
-    tx.oncomplete = res;
+    const historial = JSON.parse(localStorage.getItem('codex_llamadas') || '[]');
+    historial.unshift({ ...datos, fecha: Date.now() });
+    localStorage.setItem('codex_llamadas', JSON.stringify(historial));
+    res();
   });
 }
 
 async function leerLlamadas() {
-  return new Promise(res => {
-    const tx = baseDatos.transaction('llamadas');
-    const todos = tx.objectStore('llamadas').getAll();
-    todos.onsuccess = () => res(todos.result.reverse());
-  });
+  return JSON.parse(localStorage.getItem('codex_llamadas') || '[]');
 }
 
 function actualizarContadorGlobal() {
@@ -294,6 +329,8 @@ async function reconectar() {
 
 // INICIO
 async function iniciar() {
+  console.log('🚀 Iniciando Codex...');
+  
   await iniciarDB();
   
   const numeroGuardado = await leerValor('miNumero');
@@ -303,9 +340,9 @@ async function iniciar() {
     setTimeout(reconectar, 800);
   }
 
-  // ✅ Cargar historial de mensajes
-  contactos = await leerTodosLosChats();
-  console.log('📋 Chats cargados al iniciar:', Object.keys(contactos));
+  // Cargar todos los mensajes guardados
+  contactos = await cargarChatsGuardados();
+  console.log('📋 Chats cargados:', Object.keys(contactos));
   
   // Contar mensajes sin leer
   Object.keys(contactos).forEach(numero => {
@@ -321,7 +358,7 @@ async function iniciar() {
 
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && miId && (!peer || !peer.open)) {
-      console.log('👀 Página activa, verificando conexión...');
+      console.log('👀 Página activa, verificando...');
       setTimeout(reconectar, 300);
     }
   });
@@ -331,6 +368,9 @@ async function iniciar() {
       Object.keys(conexiones).forEach(amigo => enviarLatido(amigo));
     }
   }, LATIDO_INTERVALO);
+  
+  // Guardar todo antes de cerrar
+  window.addEventListener('beforeunload', guardarChatsEnLocal);
 }
 
 async function conectar(numero) {
@@ -359,12 +399,7 @@ btnAgregarUsuario.addEventListener('click', () => {
   const numero = numeroDestinoInput.value.trim();
   if (!numero || numero === miId) { alert('Escribe un número válido'); return; }
   if (!contactos[numero]) {
-    contactos[numero] = { 
-      mensajes: [], 
-      ultimoMensaje: '', 
-      ultimoTiempo: 0,
-      leido: true 
-    };
+    contactos[numero] = { mensajes: [], ultimoMensaje: '', ultimoTiempo: 0, leido: true };
   }
   
   if (peer && peer.open) {
@@ -463,7 +498,7 @@ function abrirChat(numero) {
   cajaMensajes.innerHTML = '';
   marcarComoLeido(numero);
 
-  console.log(`💬 Abriendo chat con ${numero}, mensajes guardados:`, contactos[numero]?.mensajes?.length || 0);
+  console.log(`💬 Abriendo chat con ${numero}, mensajes:`, contactos[numero]?.mensajes?.length || 0);
 
   if (contactos[numero]?.mensajes) {
     contactos[numero].mensajes.forEach(m => renderizarMensaje(m));
@@ -530,17 +565,7 @@ async function enviarMensaje() {
     conexiones[chatActivo].send(JSON.stringify(mensaje));
   }
 
-  // Guardar en base de datos local
   await guardarMensaje(chatActivo, mensaje);
-  
-  // Actualizar en memoria
-  if (!contactos[chatActivo]) {
-    contactos[chatActivo] = { mensajes: [], ultimoMensaje: '', ultimoTiempo: 0, leido: true };
-  }
-  contactos[chatActivo].mensajes.push(mensaje);
-  contactos[chatActivo].ultimoMensaje = texto;
-  contactos[chatActivo].ultimoTiempo = Date.now();
-  
   renderizarMensaje(mensaje);
   inputMensaje.value = '';
   renderizarListaChats();
@@ -566,14 +591,6 @@ inputImagen.addEventListener('change', async e => {
     }
     
     await guardarMensaje(chatActivo, mensaje);
-    
-    if (!contactos[chatActivo]) {
-      contactos[chatActivo] = { mensajes: [], ultimoMensaje: '', ultimoTiempo: 0, leido: true };
-    }
-    contactos[chatActivo].mensajes.push(mensaje);
-    contactos[chatActivo].ultimoMensaje = '[Imagen]';
-    contactos[chatActivo].ultimoTiempo = Date.now();
-    
     renderizarMensaje(mensaje);
     renderizarListaChats();
   };
@@ -601,14 +618,6 @@ inputVideo.addEventListener('change', async e => {
     }
     
     await guardarMensaje(chatActivo, mensaje);
-    
-    if (!contactos[chatActivo]) {
-      contactos[chatActivo] = { mensajes: [], ultimoMensaje: '', ultimoTiempo: 0, leido: true };
-    }
-    contactos[chatActivo].mensajes.push(mensaje);
-    contactos[chatActivo].ultimoMensaje = '[Video]';
-    contactos[chatActivo].ultimoTiempo = Date.now();
-    
     renderizarMensaje(mensaje);
     renderizarListaChats();
   };
@@ -643,14 +652,6 @@ async function grabarYEnviarAudio() {
         }
         
         await guardarMensaje(chatActivo, mensaje);
-        
-        if (!contactos[chatActivo]) {
-          contactos[chatActivo] = { mensajes: [], ultimoMensaje: '', ultimoTiempo: 0, leido: true };
-        }
-        contactos[chatActivo].mensajes.push(mensaje);
-        contactos[chatActivo].ultimoMensaje = '[Nota de voz]';
-        contactos[chatActivo].ultimoTiempo = Date.now();
-        
         renderizarMensaje(mensaje);
         renderizarListaChats();
       };
@@ -688,9 +689,11 @@ function renderizarMensaje(m) {
   div.className = `mensaje ${m.propio ? 'propio' : 'otro'}`;
   const hora = new Date(m.fecha).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
   
+  const textoSeguro = m.texto || '';
+  
   if (m.tipo === 'mensaje' || m.tipo === 'texto') {
     div.innerHTML = `
-      <p>${m.texto || '[Mensaje vacío]'}</p>
+      <p>${textoSeguro}</p>
       <p class="hora">${hora}</p>
     `;
   } else if (m.tipo === 'imagen') {
@@ -750,33 +753,15 @@ async function procesarMensajeRecibido(datosCrudos, deNumero) {
     datos.propio = false;
     datos.fecha = datos.fecha || Date.now();
     
-    console.log(`📩 Mensaje recibido de ${deNumero}:`, datos);
+    console.log(`📩 Mensaje recibido de ${deNumero}`);
     
-    // Guardar en base de datos
     await guardarMensaje(deNumero, datos);
     
-    // Actualizar en memoria
-    if (!contactos[deNumero]) {
-      contactos[deNumero] = { mensajes: [], ultimoMensaje: '', ultimoTiempo: 0, leido: true };
-    }
-    contactos[deNumero].mensajes.push(datos);
-    
-    const ultimoTexto = 
-      datos.tipo === 'imagen' ? '[Imagen]' :
-      datos.tipo === 'video' ? '[Video]' :
-      datos.tipo === 'audio' ? '[Nota de voz]' :
-      datos.texto || '[Mensaje vacío]';
-      
-    contactos[deNumero].ultimoMensaje = ultimoTexto;
-    contactos[deNumero].ultimoTiempo = datos.fecha;
-    contactos[deNumero].leido = chatActivo === deNumero;
-    
-    // Si no tengo el chat abierto, contar como no leído
-    if (chatActivo !== deNumero) {
+    if (chatActivo === deNumero) {
+      renderizarMensaje(datos);
+    } else {
       mensajesSinLeer[deNumero] = (mensajesSinLeer[deNumero] || 0) + 1;
       actualizarContadorGlobal();
-    } else {
-      renderizarMensaje(datos);
     }
     
     renderizarListaChats();
